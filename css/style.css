@@ -1,0 +1,1124 @@
+:root {
+    --bg-gradient: linear-gradient(135deg, #f5f7fa 0%, #e8eef5 100%);
+    --glass-bg: rgba(255, 255, 255, 0.7);
+    --glass-border: rgba(0, 0, 0, 0.08);
+    --primary-color: #2563eb;
+    --primary-hover: #1d4ed8;
+    --text-primary: #1f2937;
+    --text-secondary: #6b7280;
+    --accent-success: #15803d; /* Darker green (Tailwind Green 700) */
+    --accent-danger: #ef4444;
+    --font-family: 'Outfit', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+body {
+    margin: 0;
+    padding: 0;
+    font-family: var(--font-family);
+    background: var(--bg-gradient);
+    color: var(--text-primary);
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    overflow: hidden;
+}
+
+.glass-container {
+    display: flex;
+    width: 90vw;
+    height: 90vh;
+    background: var(--glass-bg);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid var(--glass-border);
+    border-radius: 24px;
+    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+    overflow: hidden;
+}
+
+/* Sidebar */
+.sidebar {
+    width: 250px;
+    padding: 2rem;
+    background: rgba(0, 0, 0, 0.02);
+    border-right: 1px solid var(--glass-border);
+    display: flex;
+    flex-direction: column;
+    transition: width 0.3s ease, padding-left 0.3s ease, padding-right 0.3s ease;
+    overflow: hidden;
+}
+
+.sidebar-inner {
+    width: 250px;
+    min-width: 250px;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+}
+
+.brand h1 {
+    font-size: 1.8rem;
+    margin: 0;
+    width: fit-content;
+    background: linear-gradient(to right, #2563eb, #3b82f6);
+    background-clip: text;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+
+.brand p {
+    margin: 5px 0 0;
+    color: var(--text-secondary);
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.search-box {
+    margin-top: 2rem;
+    margin-bottom: 2rem;
+}
+
+.search-box input {
+    width: 100%;
+    padding: 0.8rem;
+    border: 1px solid var(--glass-border);
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.5);
+    font-family: inherit;
+    box-sizing: border-box;
+}
+
+.unit-section {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+}
+
+.unit-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.unit-list li {
+    padding: 10px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: 0.2s;
+    color: var(--text-secondary);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    white-space: normal;
+    position: relative;
+    box-sizing: border-box;
+    width: 100%;
+}
+
+.unit-list li > span:first-child {
+    flex: 1;
+    overflow-wrap: break-word;
+    line-height: normal;
+}
+
+.unit-list li:hover {
+    background: rgba(0, 0, 0, 0.03);
+    color: var(--text-primary);
+}
+
+.unit-list li.active {
+    background: white;
+    color: var(--primary-color);
+    font-weight: 600;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
+}
+
+.nested-unit-list {
+    list-style: none;
+    padding-left: 20px;
+    margin: 0;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.nested-unit-list li {
+    padding: 8px 10px;
+    font-size: 0.9em;
+}
+
+.unit-count {
+    color: var(--text-secondary);
+    opacity: 0.5;
+    font-size: 0.9rem;
+    flex-shrink: 0;
+    text-align: right;
+    transition: opacity 0.2s;
+}
+
+/* On Li Hover: Hide count, show actions */
+.unit-list li:hover .unit-count {
+    opacity: 0;
+}
+
+/* Keep count visible for General (no actions) */
+.unit-list li[data-id="general"]:hover .unit-count {
+    opacity: 0.5;
+}
+
+/* Course folder icon interaction */
+.course-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    margin-right: 6px;
+    cursor: pointer;
+}
+.course-icon .folder-svg {
+    display: block;
+}
+.course-icon .arrow-svg {
+    display: none;
+}
+.unit-list li:hover .course-icon .folder-svg {
+    display: none;
+}
+.unit-list li:hover .course-icon .arrow-svg {
+    display: block;
+}
+
+/* Base action button */
+.btn-primary {
+    padding: 0.5rem 1rem;
+    border-radius: 8px;
+    font-weight: 600;
+    font-family: inherit;
+    font-size: 0.85rem;
+    line-height: 1.4;
+    cursor: pointer;
+    transition: 0.2s;
+    border: 1.5px solid transparent;
+    box-sizing: border-box;
+}
+
+.unit-actions {
+    display: flex;
+    gap: 5px;
+    flex-shrink: 0;
+    justify-content: flex-end;
+    position: absolute;
+    right: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s;
+}
+
+.unit-list li:hover .unit-actions {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+.delete-unit-btn,
+.rename-unit-btn,
+.move-unit-btn,
+.delete-course-btn,
+.rename-course-btn {
+    background: none;
+    border: none;
+    color: #999;
+    font-size: 1.1rem;
+    line-height: 1;
+    cursor: pointer;
+    padding: 0 2px;
+}
+
+.delete-unit-btn:hover,
+.delete-course-btn:hover {
+    color: var(--accent-danger);
+}
+
+.rename-unit-btn:hover,
+.rename-course-btn:hover {
+    color: var(--primary-color);
+}
+
+.move-unit-btn:hover {
+    color: var(--primary-color);
+}
+
+.sidebar-footer {
+    margin-top: 1rem;
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    justify-content: center;
+}
+
+/* Main Content */
+.content {
+    flex: 1;
+    padding: 2rem 3rem;
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+}
+
+header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 2rem;
+}
+
+.btn-hamburger {
+    background: none;
+    border: none;
+    font-size: 1.6rem;
+    cursor: pointer;
+    padding: 0.25rem 0.5rem;
+    border-radius: 8px;
+    color: #333;
+    transition: background 0.2s;
+}
+
+.btn-hamburger:hover {
+    background: rgba(0, 0, 0, 0.06);
+}
+
+header h2 {
+    font-weight: 300;
+    font-size: 2rem;
+    margin: 0;
+}
+
+.entry-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 20px;
+    padding-bottom: 2rem;
+}
+
+/* Cards */
+.course-card {
+    background: linear-gradient(135deg, #f8f9fa, #e9ecef);
+    border: 1px solid var(--glass-border);
+    border-radius: 16px;
+    padding: 1.5rem;
+    transition: all 0.2s;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    cursor: pointer;
+    width: 100%;
+    height: 160px;
+    box-sizing: border-box;
+}
+
+.course-card:hover {
+    box-shadow: 0 10px 20px rgba(0, 0, 0, 0.05);
+    border-color: var(--primary-color);
+}
+
+.course-card-icon {
+    font-size: 2.5rem;
+    text-align: center;
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--primary-color);
+}
+
+.flowchart-card {
+    background: white;
+    border: 1px solid var(--glass-border);
+    border-radius: 16px;
+    padding: 1.5rem;
+    transition: all 0.2s;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    cursor: pointer;
+    width: 100%;
+    height: 160px;
+    box-sizing: border-box;
+}
+
+.flowchart-card:hover {
+    box-shadow: 0 10px 20px rgba(0, 0, 0, 0.05);
+    border-color: var(--primary-color);
+}
+
+.flowchart-card-icon {
+    font-size: 2.5rem;
+    text-align: center;
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--primary-color);
+    opacity: 0.8;
+}
+
+.flowchart-card-info {
+    text-align: center;
+}
+
+.flowchart-card-info h3 {
+    margin: 0 0 4px;
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.flowchart-card-info p {
+    margin: 0;
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+}
+
+.flowchart-card-actions {
+    display: flex;
+    gap: 6px;
+    justify-content: center;
+    opacity: 0;
+    transition: opacity 0.2s;
+}
+
+.flowchart-card:hover .flowchart-card-actions {
+    opacity: 1;
+}
+
+.flowchart-card-actions button {
+    font-size: 0.75rem;
+    padding: 4px 10px;
+    border: 1px solid #ddd;
+    background: transparent;
+    border-radius: 4px;
+    cursor: pointer;
+    font-family: inherit;
+}
+
+.flowchart-card-actions button:hover {
+    background: #f9fafb;
+    border-color: #bbb;
+}
+
+.flowchart-card-actions .btn-danger:hover {
+    color: var(--accent-danger);
+    border-color: var(--accent-danger);
+}
+
+.card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    height: 40px;
+    overflow: hidden;
+}
+
+.card-header h3 {
+    margin: 0;
+    font-size: 1rem;
+    line-height: 1.2;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.card-actions {
+    display: flex;
+    gap: 5px;
+}
+
+.card-actions button {
+    font-size: 0.75rem;
+    padding: 4px 8px;
+    border: 1px solid #ddd;
+    background: transparent;
+    border-radius: 4px;
+    cursor: pointer;
+    font-family: inherit;
+}
+
+.card-actions button:hover {
+    background: #f9fafb;
+    border-color: #bbb;
+}
+
+.card-actions .btn-danger:hover {
+    color: var(--accent-danger);
+    border-color: var(--accent-danger);
+}
+
+/* Modal */
+.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(0, 0, 0, 0.2);
+    backdrop-filter: blur(5px);
+    display: none;
+    justify-content: center;
+    align-items: center;
+    z-index: 100;
+}
+
+#entry-modal {
+    z-index: 105; /* Ensures Edit JSON modal overlays the View modal */
+}
+
+.modal-overlay.visible {
+    display: flex;
+}
+
+.modal-content {
+    background: white;
+    width: 80vw;
+    height: 80vh;
+    border-radius: 20px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.2);
+}
+
+.modal-header {
+    padding: 1rem 2rem;
+    border-bottom: 1px solid #eee;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.btn-close {
+    font-size: 2rem;
+    background: none;
+    border: none;
+    cursor: pointer;
+    line-height: 1;
+}
+
+.modal-body {
+    flex: 1;
+    display: flex;
+    overflow: hidden;
+}
+
+.editor-pane {
+    width: 40%;
+    padding: 2rem;
+    border-right: 1px solid #eee;
+    background: #fafafa;
+    display: flex;
+    flex-direction: column;
+}
+
+.modal-footer {
+    padding: 1rem 2rem;
+    border-top: 1px solid #eee;
+    display: flex;
+    justify-content: flex-end;
+}
+
+/* Editor Pane Inputs */
+.editor-pane input,
+.editor-pane textarea {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 1rem;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    font-family: inherit;
+    font-size: 0.9rem;
+    margin-bottom: 1rem;
+    display: block;
+}
+
+.editor-pane textarea {
+    flex: 1;
+    resize: none;
+    line-height: 1.5;
+    font-family: monospace;
+}
+
+textarea:focus {
+    outline: 2px solid var(--primary-color);
+    border-color: transparent;
+}
+
+/* Buttons */
+button {
+    font-family: inherit;
+}
+
+.btn-primary {
+    background: var(--primary-color);
+    color: white;
+    border: none;
+    padding: 0.8rem 1.5rem;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: 600;
+    transition: 0.2s;
+}
+
+.btn-primary:hover {
+    background: var(--primary-hover);
+    transform: translateY(-1px);
+}
+
+.btn-secondary {
+    background: transparent;
+    border: 1px solid var(--glass-border);
+    color: var(--text-secondary);
+    padding: 0.5rem 1rem;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.8rem;
+    transition: 0.2s;
+    font-weight: 500;
+}
+
+.btn-secondary:hover {
+    background: rgba(0, 0, 0, 0.05);
+    color: var(--text-primary);
+    border-color: #ccc;
+}
+
+.icon-btn {
+    background: transparent;
+    border: none;
+    color: #666;
+    cursor: pointer;
+    padding: 8px;
+    border-radius: 8px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    transition: 0.2s;
+}
+
+.icon-btn:hover {
+    background: rgba(0, 0, 0, 0.05);
+    color: #111;
+}
+
+/* Empty state */
+.empty-state {
+    grid-column: 1 / -1;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 50vh;
+    color: var(--text-secondary);
+    font-size: 1.2rem;
+    font-style: italic;
+}
+
+/* Drag and Drop */
+.unit-list li.dragging {
+    opacity: 0.5;
+    background: rgba(37, 99, 235, 0.1);
+    transform: scale(0.98);
+}
+
+.unit-list li.drag-over {
+    border-top: 2px solid var(--primary-color);
+    background: rgba(37, 99, 235, 0.05);
+}
+
+/* Sidebar Button Centering Tweaks */
+#btn-add-unit {
+    width: 100%;
+    margin: 10px 0 0;
+    display: block;
+}
+
+/* Sidebar Collapse Mode */
+.glass-container.sidebar-collapsed .sidebar {
+    width: 0;
+    padding-left: 0;
+    padding-right: 0;
+    border-right: none;
+}
+
+.glass-container.sidebar-collapsed .btn-hamburger {
+    font-size: 1.8rem;
+    color: var(--primary-color);
+}
+
+/* Tooltip Styles */
+[data-tooltip] {
+    position: relative;
+    cursor: default;
+}
+
+[data-tooltip]:hover::after {
+    content: attr(data-tooltip);
+    position: absolute;
+    bottom: 110%;
+    left: 50%;
+    transform: translateX(-50%);
+    background-color: #333;
+    color: #fff;
+    -webkit-text-fill-color: #fff;
+    padding: 5px 10px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 500;
+    white-space: nowrap;
+    opacity: 0;
+    animation: fadeInTooltip 0.2s forwards;
+    pointer-events: none;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+    z-index: 100;
+}
+
+@keyframes fadeInTooltip {
+    to {
+        opacity: 1;
+        transform: translateX(-50%) translateY(0);
+    }
+
+    from {
+        opacity: 0;
+        transform: translateX(-50%) translateY(5px);
+    }
+}
+
+/* --- Custom Prompt / Confirm Modal --- */
+.link-modal-overlay {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(0, 0, 0, 0.5);
+    z-index: 2000;
+    justify-content: center;
+    align-items: center;
+}
+
+.link-modal-overlay.active {
+    display: flex;
+}
+
+.link-modal {
+    background-color: #ffffff;
+    border-radius: 12px;
+    padding: 25px;
+    max-width: 400px;
+    width: 90%;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+}
+
+.link-modal h2 {
+    font-size: 18px;
+    font-weight: 600;
+    margin-bottom: 5px;
+    color: #333;
+}
+
+.link-modal .modal-description {
+    font-size: 14px;
+    color: #767676;
+    margin-bottom: 20px;
+}
+
+.link-modal-input {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    font-family: inherit;
+    font-size: 14px;
+    margin-bottom: 20px;
+    box-sizing: border-box;
+}
+
+.link-modal-input:hover,
+.link-modal-input:focus {
+    outline: none;
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 1px var(--primary-color);
+}
+
+.link-modal-select {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    font-family: inherit;
+    font-size: 14px;
+    margin-bottom: 20px;
+    box-sizing: border-box;
+    background-color: #fff;
+    cursor: pointer;
+}
+
+.link-modal-select:hover,
+.link-modal-select:focus {
+    outline: none;
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 1px var(--primary-color);
+}
+
+.link-modal-buttons {
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+}
+
+.link-modal-buttons button {
+    padding: 8px 16px;
+    border: none;
+    border-radius: 6px;
+    font-family: inherit;
+    font-weight: 600;
+    font-size: 14px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.link-modal-buttons .btn-cancel {
+    background-color: #f0f0f0;
+    color: #333;
+}
+
+.link-modal-buttons .btn-cancel:hover {
+    background-color: #e0e0e0;
+}
+
+.link-modal-buttons .btn-save {
+    background-color: var(--primary-color);
+    color: white;
+}
+
+.link-modal-buttons .btn-save:hover {
+    opacity: 0.9;
+}
+
+/* =============================== */
+/* Flowchart Canvas (View Modal)   */
+/* =============================== */
+
+.flowchart-canvas {
+    display: flex;
+    flex-direction: column;
+    padding: 2rem;
+    min-height: 100%;
+    box-sizing: border-box;
+    background: #ffffff; /* Match mockup background */
+}
+
+/* Flowchart Title (Canvas) */
+.canvas-title-wrapper {
+    width: 100%;
+    margin-bottom: 2rem;
+    box-sizing: border-box;
+}
+
+.canvas-title {
+    background: transparent;
+    border: none;
+    border-bottom: 3px solid #111;
+    border-radius: 0;
+    text-align: center;
+    padding: 0 1rem 0.2rem; /* Bring text close to underline */
+    margin: 0;
+    font-size: 2.2rem;
+    font-weight: 700;
+    color: #111;
+    box-shadow: none;
+}
+
+.canvas-columns {
+    display: flex;
+    gap: 3rem;
+    overflow-x: auto;
+    flex: 1;
+    padding: 10px 20px;
+}
+
+.canvas-columns > .phase-col:first-child {
+    margin-left: auto;
+}
+
+.canvas-columns > .phase-col:last-child {
+    margin-right: auto;
+}
+
+.phase-col {
+    min-width: 320px;
+    max-width: 320px;
+    display: flex;
+    flex-direction: column;
+}
+
+.phase-header {
+    background: white;
+    border: 2px solid #111;
+    border-radius: 6px;
+    padding: 1.25rem 1rem;
+    text-align: center;
+    position: relative;
+    z-index: 2;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+}
+
+.phase-header h3 {
+    margin: 0;
+    font-size: 1.3rem;
+    font-weight: 500;
+    color: #111;
+    transition: 0.2s;
+}
+
+/* Phase Complete Styling */
+.phase-col.phase-completed .phase-header {
+    border-color: var(--accent-success);
+}
+.phase-col.phase-completed .phase-header h3 {
+    color: var(--accent-success);
+}
+.phase-col.phase-completed .s-path {
+    stroke: var(--accent-success);
+}
+.phase-col.phase-completed .s-dot {
+    fill: var(--accent-success);
+}
+.phase-connector.phase-completed .phase-arrow-line {
+    stroke: var(--accent-success);
+}
+.phase-connector.phase-completed .phase-arrow-head {
+    fill: var(--accent-success);
+}
+
+.phase-connector {
+    position: absolute;
+    right: -3rem; /* Spans exactly the 3rem flex gap */
+    top: 50%;
+    transform: translateY(-50%);
+    width: 3rem;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    z-index: 1;
+}
+
+.phase-connector svg {
+    overflow: visible;
+}
+
+/* S-Connector */
+.s-connector {
+    width: 20px;
+    height: 30px;
+    margin-left: calc(50% - 1px);
+    position: relative;
+}
+
+.s-connector svg {
+    width: 100%;
+    height: 100%;
+    overflow: visible;
+}
+
+.step-list {
+    display: flex;
+    flex-direction: column;
+}
+
+.step-row {
+    display: flex;
+    align-items: stretch;
+    width: 100%;
+    cursor: pointer;
+    position: relative;
+    transition: 0.2s;
+}
+
+.step-row:hover .check-circle {
+    transform: scale(1.1);
+    box-shadow: 0 4px 10px rgba(0,0,0,0.08);
+    border-color: var(--primary-color);
+}
+
+.step-row.checked:hover .check-circle {
+    border-color: var(--accent-success);
+}
+
+.step-status {
+    width: 26px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    margin-right: 18px;
+    position: relative;
+}
+
+.check-circle {
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    border: 2px solid #111;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background: white;
+    z-index: 2;
+    box-sizing: border-box;
+    margin-top: calc((64px - 26px) / 2); /* Vertically center with min-height 64px step card */
+    transition: 0.2s;
+    flex-shrink: 0;
+}
+
+.check-circle svg {
+    width: 16px;
+    height: 16px;
+    fill: none;
+    stroke: #111;
+    stroke-width: 3;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    opacity: 0;
+    transition: 0.2s;
+}
+
+.check-circle.checked svg {
+    opacity: 1;
+}
+
+.status-line {
+    position: absolute;
+    top: 45px;
+    bottom: -19px;
+    left: 12px;
+    width: 2px;
+    background-color: var(--primary-color);
+    z-index: 1;
+}
+
+.status-line.checked {
+    /* Current is checked, but next is NOT */
+    background: linear-gradient(to bottom, var(--accent-success) 50%, var(--primary-color) 50%);
+}
+
+.status-line.checked.next-checked {
+    /* Both are checked */
+    background: var(--accent-success);
+}
+
+.step-card-wrapper {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.step-card {
+    width: 100%;
+    background: white;
+    border: 2px solid #111;
+    border-radius: 50px; /* Pill shape */
+    padding: 1.2rem 1.5rem;
+    box-sizing: border-box;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 64px;
+    transition: 0.2s;
+    text-align: center;
+}
+
+.step-title {
+    font-size: 1.1rem;
+    color: #111;
+    font-weight: 500;
+    transition: 0.2s;
+}
+
+/* Checked State Styling */
+.step-row.checked .check-circle {
+    border-color: var(--accent-success);
+}
+
+.step-row.checked .check-circle svg {
+    stroke: var(--accent-success);
+}
+
+.step-row.checked .step-card {
+    border-color: var(--accent-success);
+    background-color: white;
+}
+
+.step-row.checked .step-title {
+    color: var(--accent-success);
+    text-decoration: line-through;
+}
+
+.step-row.checked.next-checked .arrow-line {
+    stroke: var(--accent-success);
+}
+
+.step-row.checked.next-checked .arrow-head {
+    fill: var(--accent-success);
+}
+
+.card-arrow {
+    height: 25px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.card-arrow svg {
+    overflow: visible;
+}
+
+.add-step-wrapper {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 1rem;
+}
+
+.add-step-wrapper.empty-phase {
+    justify-content: center;
+}
+
+.btn-add-step {
+    width: 276px; /* Width of the step card (320 - 26 - 18) */
+    background: transparent;
+    border: 1.5px dashed #ccc;
+    color: #888;
+    padding: 0.75rem 1rem;
+    border-radius: 50px;
+    font-size: 0.9rem;
+    cursor: pointer;
+    transition: 0.2s;
+}
+
+.add-step-wrapper.empty-phase .btn-add-step {
+    width: 100%;
+}
+
+.btn-add-step:hover {
+    border-color: var(--primary-color);
+    color: var(--primary-color);
+    background: rgba(37, 99, 235, 0.05);
+}

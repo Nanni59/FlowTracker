@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FlowTracker</title>
+
+    <!-- Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+    <!-- App Styles -->
+    <link rel="stylesheet" href="css/style.css">
+</head>
+
+<body>
+    <div class="glass-container">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="sidebar-inner">
+                <div class="brand">
+                    <h1 data-tooltip="Version 2.0">FlowTracker</h1>
+                    <p>Repository</p>
+                </div>
+
+                <div class="search-box">
+                    <input type="text" id="search-input" placeholder="Search flowcharts...">
+                </div>
+
+                <div class="unit-section">
+                    <ul id="unit-list" class="unit-list">
+                        <!-- Injected by app.js -->
+                    </ul>
+                    <button id="btn-add-unit" class="btn-secondary" style="width:100%; margin-top:10px;">New
+                        Flowchart</button>
+                    <button id="btn-add-course" class="btn-secondary" style="width:100%; margin-top:5px;">New
+                        Category</button>
+                </div>
+
+                <div class="sidebar-footer">
+                    <button id="btn-export" class="btn-secondary">Export JSON</button>
+                    <label for="file-import" class="btn-secondary">Import JSON</label>
+                    <input type="file" id="file-import" style="display:none" accept=".json">
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="content">
+            <header>
+                <button id="btn-fullscreen" class="btn-hamburger" title="Toggle Sidebar">&#9776;</button>
+                <button id="btn-add-entry" class="btn-primary">New Flowchart</button>
+            </header>
+
+            <div id="main-content" class="entry-grid">
+                <!-- Entries injected here by app.js -->
+            </div>
+        </main>
+    </div>
+
+    <!-- Edit Modal (JSON Editor) -->
+    <div id="entry-modal" class="modal-overlay">
+        <div class="modal-content glass-panel">
+            <div class="modal-header">
+                <h3>Edit Flowchart JSON</h3>
+                <button id="btn-cancel-entry" class="btn-close">&times;</button>
+            </div>
+            <div class="modal-body split-pane">
+                <div class="editor-pane" style="width:100%;">
+                    <textarea id="modal-raw-input" placeholder="Enter JSON data..."></textarea>
+                </div>
+            </div>
+            <div class="modal-footer" style="justify-content:space-between; align-items:center;">
+                <div id="json-error" class="error-msg" style="color:var(--accent-danger);"></div>
+                <button id="btn-save-entry" class="btn-primary">Save Changes</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Full Screen View Modal -->
+    <div id="view-modal" class="modal-overlay">
+        <div class="modal-content glass-panel" style="width:95vw; height:95vh;">
+            <div class="modal-header">
+                <h3 id="view-modal-title" style="display:none;">Title</h3>
+                <div style="display:flex; align-items:center; gap:8px; margin-left:auto;">
+                    <button id="btn-add-phase" class="icon-btn" title="New Phase">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="12" y1="8" x2="12" y2="16"></line><line x1="8" y1="12" x2="16" y2="12"></line></svg>
+                    </button>
+                    <button id="btn-edit-view" class="icon-btn" title="Edit JSON">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>
+                    </button>
+                    <button id="btn-close-view" class="icon-btn" title="Close" style="font-size: 1.6rem; line-height: 1;">&times;</button>
+                </div>
+            </div>
+            <div class="modal-body">
+                <div id="view-modal-content" style="width:100%; height:100%; overflow:auto; position:relative;">
+                    <!-- Content Rendered Here -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Custom Modal (Replaces native prompt/confirm) -->
+    <div id="customModalOverlay" class="link-modal-overlay" aria-hidden="true">
+        <div class="link-modal" role="dialog" aria-modal="true" aria-labelledby="customModalTitle"
+            aria-describedby="customModalMessage" tabindex="-1">
+            <h2 id="customModalTitle">Title</h2>
+            <div class="modal-description" id="customModalMessage">Message</div>
+
+            <input type="text" id="customModalInputText" class="link-modal-input" style="display:none;"
+                spellcheck="false">
+
+            <select id="customModalInputSelect" class="link-modal-select" style="display:none;"></select>
+
+            <div class="link-modal-buttons">
+                <button class="btn-cancel" id="customModalCancel">Cancel</button>
+                <button class="btn-save" id="customModalSave">OK</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts (Order Matters) -->
+    <script src="js/library.js"></script>
+    <script src="js/app.js"></script>
+</body>
+
+</html>
