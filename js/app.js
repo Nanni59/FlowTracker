@@ -932,6 +932,7 @@ class App {
         this.els.viewModalTitle.style.display = 'none';
 
         const syncAlignment = () => this.syncStepStatusAlignment();
+        syncAlignment();
         requestAnimationFrame(syncAlignment);
         if (document.fonts && document.fonts.ready) {
             document.fonts.ready.then(syncAlignment);
