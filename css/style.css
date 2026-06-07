@@ -950,7 +950,6 @@ button {
     width: 100%;
     cursor: pointer;
     position: relative;
-    transition: 0.2s;
     --step-card-height: 64px;
     --next-step-card-height: 64px;
 }
@@ -986,7 +985,7 @@ button {
     z-index: 2;
     box-sizing: border-box;
     margin-top: calc((var(--step-card-height) - 26px) / 2);
-    transition: 0.2s;
+    transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s;
     flex-shrink: 0;
 }
 
@@ -999,7 +998,7 @@ button {
     stroke-linecap: round;
     stroke-linejoin: round;
     opacity: 0;
-    transition: 0.2s;
+    transition: opacity 0.2s, stroke 0.2s;
 }
 
 .check-circle.checked svg {
@@ -1044,7 +1043,7 @@ button {
     align-items: center;
     justify-content: center;
     min-height: 64px;
-    transition: 0.2s;
+    transition: border-color 0.2s, background-color 0.2s;
     text-align: center;
 }
 
@@ -1052,7 +1051,7 @@ button {
     font-size: 1.1rem;
     color: #111;
     font-weight: 500;
-    transition: 0.2s;
+    transition: color 0.2s;
 }
 
 /* Checked State Styling */
