@@ -814,6 +814,20 @@ class App {
         this.renderFlowchartCanvas(fc);
     }
 
+    syncStepStatusAlignment() {
+        const rows = Array.from(this.els.viewModalContent.querySelectorAll('.step-row'));
+
+        rows.forEach((row, index) => {
+            const card = row.querySelector('.step-card');
+            const nextCard = rows[index + 1]?.querySelector('.step-card');
+            const cardHeight = card ? card.getBoundingClientRect().height : 64;
+            const nextCardHeight = nextCard ? nextCard.getBoundingClientRect().height : cardHeight;
+
+            row.style.setProperty('--step-card-height', `${cardHeight}px`);
+            row.style.setProperty('--next-step-card-height', `${nextCardHeight}px`);
+        });
+    }
+
     renderFlowchartCanvas(fc) {
         this.els.viewModalContent.innerHTML = '';
         
@@ -916,6 +930,12 @@ class App {
         
         // Hide the default modal header title since we have the large canvas title now
         this.els.viewModalTitle.style.display = 'none';
+
+        const syncAlignment = () => this.syncStepStatusAlignment();
+        requestAnimationFrame(syncAlignment);
+        if (document.fonts && document.fonts.ready) {
+            document.fonts.ready.then(syncAlignment);
+        }
     }
 }
 
