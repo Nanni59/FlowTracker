@@ -26,6 +26,8 @@ class App {
             btnCloseView: document.getElementById('btn-close-view'),
             btnEditView: document.getElementById('btn-edit-view'),
             btnAddPhase: document.getElementById('btn-add-phase'),
+            btnPrevFc: document.getElementById('btn-prev-fc'),
+            btnNextFc: document.getElementById('btn-next-fc'),
 
             // JSON Edit Modal
             jsonModal: document.getElementById('entry-modal'),
@@ -425,6 +427,28 @@ class App {
                 this.renderMainContent();
             });
         }
+
+        const navigateFc = (dir) => {
+            if (!this.state.viewingFlowchartId) return;
+            const { siblings, idx } = this._getFlowchartSiblings();
+            const next = siblings[idx + dir];
+            if (next) this.openFlowchartView(next);
+        };
+
+        if (this.els.btnPrevFc) {
+            this.els.btnPrevFc.addEventListener('click', () => navigateFc(-1));
+        }
+        if (this.els.btnNextFc) {
+            this.els.btnNextFc.addEventListener('click', () => navigateFc(1));
+        }
+
+        document.addEventListener('keydown', (e) => {
+            if (!this.state.viewingFlowchartId) return;
+            // Skip if user is typing in an input/textarea
+            if (['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName)) return;
+            if (e.key === 'ArrowLeft')  { e.preventDefault(); navigateFc(-1); }
+            if (e.key === 'ArrowRight') { e.preventDefault(); navigateFc(1); }
+        });
 
         if (this.els.btnAddPhase) {
             this.els.btnAddPhase.addEventListener('click', async () => {
@@ -934,11 +958,31 @@ class App {
         }
     }
 
+    _getFlowchartSiblings() {
+        const all = this.library.getFlowcharts();
+        const current = this.library.getFlowchart(this.state.viewingFlowchartId);
+        if (!current) return { siblings: [], idx: -1 };
+        const siblings = all.filter(f => (f.categoryId ?? null) === (current.categoryId ?? null));
+        const idx = siblings.findIndex(f => f.id === current.id);
+        return { siblings, idx };
+    }
+
+    _updateNavButtons() {
+        const { siblings, idx } = this._getFlowchartSiblings();
+        const hasPrev = idx > 0;
+        const hasNext = idx < siblings.length - 1;
+        this.els.btnPrevFc.disabled = !hasPrev;
+        this.els.btnNextFc.disabled = !hasNext;
+        this.els.btnPrevFc.style.opacity = hasPrev ? '1' : '0.3';
+        this.els.btnNextFc.style.opacity = hasNext ? '1' : '0.3';
+    }
+
     openFlowchartView(fc) {
         this.state.viewingFlowchartId = fc.id;
         this._prevBarPercent = null;
         this.els.viewModalTitle.textContent = fc.name;
         this.els.viewModal.classList.add('visible');
+        this._updateNavButtons();
         this.renderFlowchartCanvas(fc);
     }
 
