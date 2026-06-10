@@ -332,28 +332,22 @@ class App {
                     e.stopPropagation();
                     const fcId = e.target.closest('li').dataset.id;
                     const categories = this.library.getCategories();
-                    
-                    if (categories.length === 0) {
-                        alert('Create a category first before assigning flowcharts.');
-                        return;
-                    }
-                    
                     const sortedCats = [...categories].sort((a, b) => a.name.localeCompare(b.name));
-                    
-                    let selectOptions = [];
-                    sortedCats.forEach((c) => {
-                        selectOptions.push({ label: c.name, value: c.id });
-                    });
-                    
+
+                    const selectOptions = [
+                        { label: '— No Category (Standalone) —', value: '' },
+                        ...sortedCats.map(c => ({ label: c.name, value: c.id }))
+                    ];
+
                     const choice = await this.showCustomModal({
                         title: "Move to Category",
                         message: "Select a category to assign to:",
                         type: "select",
                         selectOptions: selectOptions
                     });
-                    
+
                     if (choice !== null) {
-                        this.library.assignFlowchartToCategory(fcId, choice);
+                        this.library.assignFlowchartToCategory(fcId, choice === '' ? null : choice);
                         this.renderSidebar();
                         this.renderMainContent();
                     }
@@ -514,6 +508,90 @@ class App {
                     }
                 }
             });
+
+            this.els.viewModalContent.addEventListener('contextmenu', (e) => {
+                const row = e.target.closest('.step-row');
+                if (!row) return;
+                e.preventDefault();
+
+                const stepId = row.dataset.stepId;
+                const phaseId = row.dataset.phaseId;
+
+                // Remove any existing context menu
+                document.getElementById('step-context-menu')?.remove();
+
+                const menu = document.createElement('div');
+                menu.id = 'step-context-menu';
+                menu.className = 'step-context-menu';
+                menu.innerHTML = `
+                    <button data-action="before">Add Step Before</button>
+                    <button data-action="after">Add Step After</button>
+                    <div class="context-menu-divider"></div>
+                    <button data-action="delete" class="context-menu-danger">Delete Step</button>
+                `;
+
+                // Position near cursor, keeping within viewport
+                document.body.appendChild(menu);
+                const menuW = menu.offsetWidth;
+                const menuH = menu.offsetHeight;
+                let x = e.clientX;
+                let y = e.clientY;
+                if (x + menuW > window.innerWidth)  x = window.innerWidth - menuW - 8;
+                if (y + menuH > window.innerHeight) y = window.innerHeight - menuH - 8;
+                menu.style.left = x + 'px';
+                menu.style.top  = y + 'px';
+
+                const dismiss = () => menu.remove();
+
+                menu.addEventListener('click', async (ev) => {
+                    const action = ev.target.closest('button')?.dataset.action;
+                    if (!action) return;
+                    dismiss();
+
+                    const fc = this.library.getFlowchart(this.state.viewingFlowchartId);
+                    const phase = fc.phases.find(p => p.id === phaseId);
+                    if (!phase) return;
+                    const idx = phase.steps.findIndex(s => s.id === stepId);
+                    if (idx === -1) return;
+
+                    if (action === 'delete') {
+                        const confirmed = await this.showCustomModal({
+                            title: "Delete Step",
+                            message: `Delete "${phase.steps[idx].title}"?`,
+                            type: "confirm"
+                        });
+                        if (!confirmed) return;
+                        phase.steps.splice(idx, 1);
+                        this.library.saveData();
+                        this.renderFlowchartCanvas(fc);
+                        return;
+                    }
+
+                    const name = await this.showCustomModal({ title: "New Step", message: "Enter step description:", type: "text" });
+                    if (!name || !name.trim()) return;
+                    const newStep = { id: 's-' + Date.now(), title: name.trim(), completed: false };
+                    const insertAt = action === 'before' ? idx : idx + 1;
+                    phase.steps.splice(insertAt, 0, newStep);
+                    this.library.saveData();
+                    this.renderFlowchartCanvas(fc);
+                });
+
+                // Dismiss on outside click, Escape, or scroll
+                const onDismiss = (ev) => {
+                    if (!menu.contains(ev.target)) {
+                        dismiss();
+                        cleanup();
+                    }
+                };
+                const onKey = (ev) => { if (ev.key === 'Escape') { dismiss(); cleanup(); } };
+                const cleanup = () => {
+                    document.removeEventListener('click', onDismiss);
+                    document.removeEventListener('keydown', onKey);
+                };
+                // Defer so this contextmenu event doesn't immediately close the menu
+                setTimeout(() => document.addEventListener('click', onDismiss), 0);
+                document.addEventListener('keydown', onKey);
+            });
         }
 
         this.attachDragAndDrop();
@@ -547,37 +625,64 @@ class App {
             this.els.sidebarList.addEventListener('dragend', (e) => {
                 const li = e.target.closest('li');
                 if (li) li.classList.remove('dragging');
-                document.querySelectorAll('.unit-list li').forEach(el => el.classList.remove('drag-over'));
+                document.querySelectorAll('.unit-list li').forEach(el => {
+                    el.classList.remove('drag-over', 'drag-over-category');
+                });
             });
 
             this.els.sidebarList.addEventListener('dragover', (e) => {
                 e.preventDefault();
                 const li = e.target.closest('li');
-                if (!li || li.dataset.id === 'general' || li.dataset.id === draggedId) return;
-                li.classList.add('drag-over');
+                if (!li || li.dataset.id === draggedId) return;
+                const targetId = li.dataset.id;
+                if (targetId === 'general' || targetId.startsWith('c-')) {
+                    li.classList.add('drag-over-category');
+                } else {
+                    li.classList.add('drag-over');
+                }
             });
 
             this.els.sidebarList.addEventListener('dragleave', (e) => {
                 const li = e.target.closest('li');
-                if (li) li.classList.remove('drag-over');
+                if (li) li.classList.remove('drag-over', 'drag-over-category');
             });
 
             this.els.sidebarList.addEventListener('drop', (e) => {
                 e.preventDefault();
                 const targetLi = e.target.closest('li');
-                if (!targetLi || targetLi.dataset.id === 'general') return;
+                if (!targetLi || !draggedId) return;
 
                 const targetId = targetLi.dataset.id;
-                if (draggedId && draggedId !== targetId) {
-                    const flowcharts = this.library.getFlowcharts();
-                    const fromIndex = flowcharts.findIndex(f => f.id === draggedId);
-                    const toIndex = flowcharts.findIndex(f => f.id === targetId);
+                if (!targetId || targetId === draggedId) return;
 
-                    if (fromIndex !== -1 && toIndex !== -1) {
-                        this.library.reorderFlowcharts(fromIndex, toIndex);
-                        this.renderSidebar();
-                    }
+                // Drop onto a category → assign flowchart to that category
+                if (targetId.startsWith('c-')) {
+                    this.library.assignFlowchartToCategory(draggedId, targetId);
+                    this.renderSidebar();
+                    this.renderMainContent();
+                    draggedId = null;
+                    return;
                 }
+
+                // Drop onto General → make standalone
+                if (targetId === 'general') {
+                    this.library.assignFlowchartToCategory(draggedId, null);
+                    this.renderSidebar();
+                    this.renderMainContent();
+                    draggedId = null;
+                    return;
+                }
+
+                // Drop onto another flowchart → reorder
+                const flowcharts = this.library.getFlowcharts();
+                const fromIndex = flowcharts.findIndex(f => f.id === draggedId);
+                const toIndex = flowcharts.findIndex(f => f.id === targetId);
+                if (fromIndex !== -1 && toIndex !== -1) {
+                    this.library.reorderFlowcharts(fromIndex, toIndex);
+                    this.renderSidebar();
+                    this.renderMainContent();
+                }
+                draggedId = null;
             });
         }
     }
@@ -761,10 +866,11 @@ class App {
                 </div>
                 <div class="flowchart-card-actions">
                     <button class="fc-rename-btn">Rename</button>
+                    <button class="fc-move-btn">Move</button>
                     <button class="fc-delete-btn btn-danger">Delete</button>
                 </div>
             `;
-            
+
             card.querySelector('h3').textContent = f.name;
 
             card.querySelector('.fc-rename-btn').addEventListener('click', async (e) => {
@@ -777,6 +883,27 @@ class App {
                 });
                 if (newName && newName.trim() && newName.trim() !== f.name) {
                     this.library.renameFlowchart(f.id, newName.trim());
+                    this.renderSidebar();
+                    this.renderMainContent();
+                }
+            });
+
+            card.querySelector('.fc-move-btn').addEventListener('click', async (e) => {
+                e.stopPropagation();
+                const categories = this.library.getCategories();
+                const sortedCats = [...categories].sort((a, b) => a.name.localeCompare(b.name));
+                const selectOptions = [
+                    { label: '— No Category (Standalone) —', value: '' },
+                    ...sortedCats.map(c => ({ label: c.name, value: c.id }))
+                ];
+                const choice = await this.showCustomModal({
+                    title: "Move to Category",
+                    message: "Select a category to assign to:",
+                    type: "select",
+                    selectOptions
+                });
+                if (choice !== null) {
+                    this.library.assignFlowchartToCategory(f.id, choice === '' ? null : choice);
                     this.renderSidebar();
                     this.renderMainContent();
                 }
@@ -809,6 +936,7 @@ class App {
 
     openFlowchartView(fc) {
         this.state.viewingFlowchartId = fc.id;
+        this._prevBarPercent = null;
         this.els.viewModalTitle.textContent = fc.name;
         this.els.viewModal.classList.add('visible');
         this.renderFlowchartCanvas(fc);
@@ -830,13 +958,25 @@ class App {
 
     renderFlowchartCanvas(fc) {
         this.els.viewModalContent.innerHTML = '';
-        
+
         const canvas = document.createElement('div');
         canvas.className = 'flowchart-canvas';
+
+        const allSteps = fc.phases.flatMap(p => p.steps);
+        const totalSteps = allSteps.length;
+        const completedSteps = allSteps.filter(s => s.completed).length;
+        const percent = totalSteps > 0 ? Math.round((completedSteps / totalSteps) * 100) : 0;
+        const isFullyComplete = totalSteps > 0 && completedSteps === totalSteps;
+        const prevPercent = this._prevBarPercent ?? 0;
+        this._prevBarPercent = percent;
 
         let html = `
             <div class="canvas-title-wrapper">
                 <h2 class="canvas-title">${this._escapeHtml(fc.name)}</h2>
+                <div class="progress-bar-track">
+                    <div class="progress-bar-fill${isFullyComplete ? ' progress-bar-complete' : ''}" style="--prev-width: ${prevPercent}%; --target-width: ${percent}%"></div>
+                </div>
+                <div class="progress-label">${completedSteps} / ${totalSteps} steps complete</div>
             </div>
             <div class="canvas-columns">
         `;
