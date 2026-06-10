@@ -28,6 +28,25 @@ class App {
             btnAddPhase: document.getElementById('btn-add-phase'),
             btnPrevFc: document.getElementById('btn-prev-fc'),
             btnNextFc: document.getElementById('btn-next-fc'),
+            btnAiGenerate: document.getElementById('btn-ai-generate'),
+
+            // AI Modal
+            aiModal: document.getElementById('ai-modal'),
+            btnCloseAi: document.getElementById('btn-close-ai'),
+            aiKeyInput: document.getElementById('ai-key-input'),
+            aiKeyInputRow: document.getElementById('ai-key-input-row'),
+            aiKeySavedRow: document.getElementById('ai-key-saved-row'),
+            btnSaveKey: document.getElementById('btn-save-key'),
+            btnClearKey: document.getElementById('btn-clear-key'),
+            aiModelSelect: document.getElementById('ai-model-select'),
+            aiTextInput: document.getElementById('ai-text-input'),
+            aiDropzone: document.getElementById('ai-dropzone'),
+            aiFileInput: document.getElementById('ai-file-input'),
+            aiFileList: document.getElementById('ai-file-list'),
+            aiError: document.getElementById('ai-error'),
+            btnAiRun: document.getElementById('btn-ai-run'),
+            aiRunSpinner: document.getElementById('ai-run-spinner'),
+            aiRunLabel: document.getElementById('ai-run-label'),
 
             // JSON Edit Modal
             jsonModal: document.getElementById('entry-modal'),
@@ -446,6 +465,9 @@ class App {
             if (!this.state.viewingFlowchartId) return;
             // Skip if user is typing in an input/textarea
             if (['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName)) return;
+            // Skip if a modal on top of the flowchart is open
+            if (this.els.aiModal.classList.contains('visible')) return;
+            if (this.els.jsonModal.classList.contains('visible')) return;
             if (e.key === 'ArrowLeft')  { e.preventDefault(); navigateFc(-1); }
             if (e.key === 'ArrowRight') { e.preventDefault(); navigateFc(1); }
         });
@@ -473,6 +495,8 @@ class App {
                 this.els.jsonModal.classList.add('visible');
             });
         }
+
+        this.attachAiListeners();
 
         if (this.els.btnCloseJson) {
             this.els.btnCloseJson.addEventListener('click', () => {
@@ -984,6 +1008,327 @@ class App {
         this.els.viewModal.classList.add('visible');
         this._updateNavButtons();
         this.renderFlowchartCanvas(fc);
+    }
+
+    // ===== AI Generation (Bring-Your-Own-Key) =====
+
+    _getGeminiKey() {
+        return localStorage.getItem('flowtracker_gemini_key') || '';
+    }
+
+    _setGeminiKey(key) {
+        localStorage.setItem('flowtracker_gemini_key', key);
+    }
+
+    _clearGeminiKey() {
+        localStorage.removeItem('flowtracker_gemini_key');
+    }
+
+    _getGeminiModel() {
+        return localStorage.getItem('flowtracker_gemini_model') || 'gemini-2.5-flash';
+    }
+
+    _setGeminiModel(model) {
+        localStorage.setItem('flowtracker_gemini_model', model);
+    }
+
+    _refreshKeyUI() {
+        const hasKey = !!this._getGeminiKey();
+        this.els.aiKeyInputRow.style.display = hasKey ? 'none' : 'flex';
+        this.els.aiKeySavedRow.style.display = hasKey ? 'flex' : 'none';
+    }
+
+    _renderAiFileList() {
+        const files = this._aiFiles || [];
+        this.els.aiFileList.innerHTML = files.map((f, i) => `
+            <div class="ai-file-chip">
+                <span class="ai-file-name" title="${this._escapeHtml(f.name)}">${this._escapeHtml(f.name)}</span>
+                <button class="ai-file-remove" data-index="${i}" title="Remove">&times;</button>
+            </div>
+        `).join('');
+    }
+
+    _isTextFile(f) {
+        return f.type.startsWith('text/') || /\.(md|markdown|txt)$/i.test(f.name);
+    }
+
+    _addAiFiles(fileList) {
+        if (!this._aiFiles) this._aiFiles = [];
+        for (const f of fileList) {
+            const isPdf = f.type === 'application/pdf';
+            const isImg = f.type.startsWith('image/');
+            const isText = this._isTextFile(f);
+            if (!isPdf && !isImg && !isText) continue;
+            // ~20MB inline cap per file
+            if (f.size > 20 * 1024 * 1024) {
+                this._showAiError(`"${f.name}" is larger than 20 MB and can't be sent inline.`);
+                continue;
+            }
+            this._aiFiles.push(f);
+        }
+        this._renderAiFileList();
+    }
+
+    _showAiError(msg) {
+        this.els.aiError.textContent = msg;
+        this.els.aiError.style.display = 'block';
+    }
+
+    _clearAiError() {
+        this.els.aiError.textContent = '';
+        this.els.aiError.style.display = 'none';
+    }
+
+    _setAiLoading(loading) {
+        this.els.btnAiRun.disabled = loading;
+        this.els.aiRunSpinner.style.display = loading ? 'inline-block' : 'none';
+        this.els.aiRunLabel.textContent = loading ? 'Generating…' : 'Generate Flowchart';
+    }
+
+    openAiModal() {
+        if (!this.state.viewingFlowchartId) return;
+        this._aiFiles = [];
+        this.els.aiTextInput.value = '';
+        this.els.aiFileInput.value = '';
+        this._renderAiFileList();
+        this._clearAiError();
+        this._setAiLoading(false);
+        this._refreshKeyUI();
+        this.els.aiModelSelect.value = this._getGeminiModel();
+        this.els.aiModal.classList.add('visible');
+    }
+
+    attachAiListeners() {
+        if (!this.els.aiModal) return;
+
+        this.els.btnAiGenerate.addEventListener('click', () => this.openAiModal());
+        this.els.btnCloseAi.addEventListener('click', () => this.els.aiModal.classList.remove('visible'));
+        this.els.aiModal.addEventListener('click', (e) => {
+            if (e.target === this.els.aiModal) this.els.aiModal.classList.remove('visible');
+        });
+
+        // Key management
+        this.els.btnSaveKey.addEventListener('click', () => {
+            const key = this.els.aiKeyInput.value.trim();
+            if (!key) { this._showAiError('Please paste an API key first.'); return; }
+            this._setGeminiKey(key);
+            this.els.aiKeyInput.value = '';
+            this._clearAiError();
+            this._refreshKeyUI();
+        });
+        this.els.btnClearKey.addEventListener('click', () => {
+            this._clearGeminiKey();
+            this._refreshKeyUI();
+        });
+
+        // Model selection
+        this.els.aiModelSelect.addEventListener('change', () => {
+            this._setGeminiModel(this.els.aiModelSelect.value);
+        });
+
+        // File pickers
+        this.els.aiDropzone.addEventListener('click', () => this.els.aiFileInput.click());
+        this.els.aiFileInput.addEventListener('change', (e) => this._addAiFiles(e.target.files));
+        this.els.aiDropzone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            this.els.aiDropzone.classList.add('drag-over');
+        });
+        this.els.aiDropzone.addEventListener('dragleave', () => {
+            this.els.aiDropzone.classList.remove('drag-over');
+        });
+        this.els.aiDropzone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            this.els.aiDropzone.classList.remove('drag-over');
+            if (e.dataTransfer.files) this._addAiFiles(e.dataTransfer.files);
+        });
+        this.els.aiFileList.addEventListener('click', (e) => {
+            const btn = e.target.closest('.ai-file-remove');
+            if (!btn) return;
+            this._aiFiles.splice(parseInt(btn.dataset.index, 10), 1);
+            this._renderAiFileList();
+        });
+
+        // Generate
+        this.els.btnAiRun.addEventListener('click', () => this.runAiGeneration());
+    }
+
+    _fileToBase64(file) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result.split(',')[1]); // strip data-URL prefix
+            reader.onerror = reject;
+            reader.readAsDataURL(file);
+        });
+    }
+
+    _fileToText(file) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result);
+            reader.onerror = reject;
+            reader.readAsText(file);
+        });
+    }
+
+    async runAiGeneration() {
+        this._clearAiError();
+
+        const key = this._getGeminiKey();
+        if (!key) { this._showAiError('Please save your Gemini API key first.'); return; }
+
+        const text = this.els.aiTextInput.value.trim();
+        const files = this._aiFiles || [];
+        if (!text && files.length === 0) {
+            this._showAiError('Add some notes or attach at least one file.');
+            return;
+        }
+
+        this._setAiLoading(true);
+        try {
+            const phases = await this.generateFlowchartFromAI({ text, files, key });
+
+            if (!Array.isArray(phases) || phases.length === 0) {
+                throw new Error('The AI did not return any phases. Try adding more detail.');
+            }
+
+            const fc = this.library.getFlowchart(this.state.viewingFlowchartId);
+            if (fc.phases && fc.phases.length > 0) {
+                const ok = await this.showCustomModal({
+                    title: 'Replace existing phases?',
+                    message: 'This flowchart already has phases. Replace them with the AI-generated ones?',
+                    type: 'confirm'
+                });
+                if (!ok) { this._setAiLoading(false); return; }
+            }
+
+            this.library.updateFlowchartData(this.state.viewingFlowchartId, phases);
+            const updated = this.library.getFlowchart(this.state.viewingFlowchartId);
+            this._prevBarPercent = null;
+            this.renderFlowchartCanvas(updated);
+            this.renderSidebar();
+            this.els.aiModal.classList.remove('visible');
+        } catch (err) {
+            this._showAiError(err.message || 'Something went wrong while generating.');
+        } finally {
+            this._setAiLoading(false);
+        }
+    }
+
+    async generateFlowchartFromAI({ text, files, key }) {
+        const MODEL = this._getGeminiModel();
+        const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${encodeURIComponent(key)}`;
+
+        // Split text/markdown files (read as text into the prompt) from binary files (PDF/images sent inline)
+        const textFiles = [];
+        const binaryFiles = [];
+        for (const f of files) {
+            if (this._isTextFile(f)) textFiles.push(f);
+            else binaryFiles.push(f);
+        }
+
+        let dataSection = '';
+        if (text) dataSection += text + '\n\n';
+        for (const tf of textFiles) {
+            const content = await this._fileToText(tf);
+            dataSection += `--- File: ${tf.name} ---\n${content}\n\n`;
+        }
+
+        const promptText = `You are an expert project manager and system architect. Analyze the provided project overview, notes, Markdown/text files, PDF text, and/or images (which may contain messy handwriting) and convert them into a highly structured, sequential workflow.
+
+Break the work into logical "Phases". Each Phase contains a series of actionable "Steps".
+
+Rules:
+1. Phase titles should be clear (e.g. "Phase 1: Planning").
+2. Keep step titles concise, clear, and actionable (ideally 3-7 words).
+3. Order phases and steps in the sequence the work should be performed.
+4. Output only the structured data — no commentary.
+
+${dataSection.trim() ? 'Here is the project data:\n' + dataSection : 'Use the attached file(s) as the project data.'}`;
+
+        const parts = [{ text: promptText }];
+        for (const f of binaryFiles) {
+            const data = await this._fileToBase64(f);
+            parts.push({ inlineData: { mimeType: f.type, data } });
+        }
+
+        const body = {
+            contents: [{ parts }],
+            generationConfig: {
+                responseMimeType: 'application/json',
+                responseSchema: {
+                    type: 'ARRAY',
+                    items: {
+                        type: 'OBJECT',
+                        properties: {
+                            title: { type: 'STRING' },
+                            steps: {
+                                type: 'ARRAY',
+                                items: {
+                                    type: 'OBJECT',
+                                    properties: { title: { type: 'STRING' } },
+                                    required: ['title']
+                                }
+                            }
+                        },
+                        required: ['title', 'steps']
+                    }
+                }
+            }
+        };
+
+        let res;
+        try {
+            res = await fetch(endpoint, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body)
+            });
+        } catch (e) {
+            throw new Error('Network error contacting Google. Check your internet connection.');
+        }
+
+        if (!res.ok) {
+            // Surface Google's actual error message — it's far more specific than the HTTP code
+            let detail = '';
+            try {
+                const errJson = await res.json();
+                detail = errJson?.error?.message || '';
+            } catch (e) { /* body wasn't JSON */ }
+
+            if (res.status === 400 || res.status === 403) {
+                throw new Error('API key rejected (HTTP ' + res.status + '). ' + (detail || 'Double-check the key and that the "Generative Language API" is enabled for its project.'));
+            }
+            if (res.status === 404) {
+                throw new Error('Model not found (HTTP 404). ' + (detail || 'The model name may be unavailable for this key.'));
+            }
+            if (res.status === 429) {
+                throw new Error('Quota/rate limit (HTTP 429). ' + (detail || 'Free tier has per-minute and per-day limits — wait ~60s.'));
+            }
+            throw new Error(`Gemini request failed (HTTP ${res.status}). ${detail}`);
+        }
+
+        const json = await res.json();
+        const raw = json?.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (!raw) throw new Error('The AI returned an empty response. Try again.');
+
+        let parsed;
+        try {
+            parsed = JSON.parse(raw);
+        } catch (e) {
+            throw new Error('The AI returned invalid JSON. Try again or simplify the input.');
+        }
+
+        // Normalize: assign fresh unique IDs + completed flags (never trust AI ids)
+        const now = Date.now();
+        return (Array.isArray(parsed) ? parsed : []).map((phase, i) => ({
+            id: `p-${now}-${i}`,
+            title: typeof phase.title === 'string' ? phase.title : `Phase ${i + 1}`,
+            steps: (Array.isArray(phase.steps) ? phase.steps : []).map((step, j) => ({
+                id: `s-${now}-${i}-${j}`,
+                title: typeof step.title === 'string' ? step.title : (typeof step === 'string' ? step : `Step ${j + 1}`),
+                completed: false
+            }))
+        }));
     }
 
     syncStepStatusAlignment() {
