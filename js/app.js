@@ -1346,6 +1346,10 @@ ${dataSection.trim() ? 'Here is the project data:\n' + dataSection : 'Use the at
     }
 
     renderFlowchartCanvas(fc) {
+        // Preserve horizontal scroll position across the full re-render
+        const prevColumns = this.els.viewModalContent.querySelector('.canvas-columns');
+        const prevScrollLeft = prevColumns ? prevColumns.scrollLeft : 0;
+
         this.els.viewModalContent.innerHTML = '';
 
         const canvas = document.createElement('div');
@@ -1389,8 +1393,8 @@ ${dataSection.trim() ? 'Here is the project data:\n' + dataSection : 'Use the at
                             ${phaseIndex < fc.phases.length - 1 ? `
                                 <div class="phase-connector ${phaseCompleteClass}">
                                     <svg width="48" height="20" viewBox="0 0 48 20" preserveAspectRatio="none">
-                                        <line class="phase-arrow-line" x1="0" y1="10" x2="45" y2="10" stroke="var(--primary-color)" stroke-width="2"/>
-                                        <polygon class="phase-arrow-head" points="38,5 48,10 38,15" fill="var(--primary-color)"/>
+                                        <line class="phase-arrow-line" x1="0" y1="10" x2="38" y2="10" stroke="var(--primary-color)" stroke-width="2" stroke-linecap="round"/>
+                                        <polygon class="phase-arrow-head" points="38,5 38,15 46,10" fill="var(--primary-color)" stroke="var(--primary-color)" stroke-width="2.5" stroke-linejoin="round"/>
                                     </svg>
                                 </div>
                             ` : ''}
@@ -1428,9 +1432,9 @@ ${dataSection.trim() ? 'Here is the project data:\n' + dataSection : 'Use the at
                                     </div>
                                     ${!isLast ? `
                                         <div class="card-arrow">
-                                            <svg width="10" height="25">
-                                                <line class="arrow-line" x1="5" y1="0" x2="5" y2="20" stroke="var(--primary-color)" stroke-width="1.5"/>
-                                                <polygon class="arrow-head" points="2,20 8,20 5,25" fill="var(--primary-color)"/>
+                                            <svg width="14" height="26">
+                                                <line class="arrow-line" x1="7" y1="0" x2="7" y2="18" stroke="var(--primary-color)" stroke-width="2" stroke-linecap="round"/>
+                                                <polygon class="arrow-head" points="2,18 12,18 7,24" fill="var(--primary-color)" stroke="var(--primary-color)" stroke-width="2.5" stroke-linejoin="round"/>
                                             </svg>
                                         </div>
                                     ` : ''}
@@ -1461,7 +1465,11 @@ ${dataSection.trim() ? 'Here is the project data:\n' + dataSection : 'Use the at
         
         canvas.innerHTML = html;
         this.els.viewModalContent.appendChild(canvas);
-        
+
+        // Restore the horizontal scroll position so toggling a step doesn't jump back to Phase 1
+        const newColumns = canvas.querySelector('.canvas-columns');
+        if (newColumns) newColumns.scrollLeft = prevScrollLeft;
+
         // Hide the default modal header title since we have the large canvas title now
         this.els.viewModalTitle.style.display = 'none';
 
