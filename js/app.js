@@ -1394,7 +1394,7 @@ ${dataSection.trim() ? 'Here is the project data:\n' + dataSection : 'Use the at
                                 <div class="phase-connector ${phaseCompleteClass}">
                                     <svg width="48" height="20" viewBox="0 0 48 20" preserveAspectRatio="none">
                                         <line class="phase-arrow-line" x1="0" y1="10" x2="38" y2="10" stroke="var(--primary-color)" stroke-width="2" stroke-linecap="round"/>
-                                        <polygon class="phase-arrow-head" points="38,5 38,15 46,10" fill="var(--primary-color)" stroke="var(--primary-color)" stroke-width="2.5" stroke-linejoin="round"/>
+                                        <polygon class="phase-arrow-head" points="38,5.5 38,14.5 45,10" fill="var(--primary-color)" stroke="var(--primary-color)" stroke-width="1.5" stroke-linejoin="round"/>
                                     </svg>
                                 </div>
                             ` : ''}
@@ -1433,8 +1433,8 @@ ${dataSection.trim() ? 'Here is the project data:\n' + dataSection : 'Use the at
                                     ${!isLast ? `
                                         <div class="card-arrow">
                                             <svg width="14" height="26">
-                                                <line class="arrow-line" x1="7" y1="0" x2="7" y2="18" stroke="var(--primary-color)" stroke-width="2" stroke-linecap="round"/>
-                                                <polygon class="arrow-head" points="2,18 12,18 7,24" fill="var(--primary-color)" stroke="var(--primary-color)" stroke-width="2.5" stroke-linejoin="round"/>
+                                                <line class="arrow-line" x1="7" y1="0" x2="7" y2="19" stroke="var(--primary-color)" stroke-width="2" stroke-linecap="round"/>
+                                                <polygon class="arrow-head" points="2.5,18 11.5,18 7,23.5" fill="var(--primary-color)" stroke="var(--primary-color)" stroke-width="1.5" stroke-linejoin="round"/>
                                             </svg>
                                         </div>
                                     ` : ''}
