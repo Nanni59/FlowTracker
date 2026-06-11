@@ -833,32 +833,69 @@ button {
     padding: 2rem;
     min-height: 100%;
     box-sizing: border-box;
-    background: #ffffff; /* Match mockup background */
+    background: #f1f5f9; /* Soft cool-grey canvas */
 }
 
-/* Flowchart Title (Canvas) */
-.canvas-title-wrapper {
+/* Flowchart Header Card (Canvas) */
+.canvas-header-card {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 2rem;
     width: 100%;
-    margin-bottom: 2rem;
     box-sizing: border-box;
+    background: #ffffff;
+    border-radius: 20px;
+    padding: 1.5rem 2rem;
+    margin-bottom: 2.5rem;
+    box-shadow: 0 4px 20px rgba(15, 23, 42, 0.05);
+}
+
+.canvas-header-left {
+    min-width: 0;
 }
 
 .canvas-title {
     background: transparent;
     border: none;
     border-radius: 0;
-    text-align: center;
-    padding: 0 1rem 0.6rem;
+    text-align: left;
+    padding: 0;
     margin: 0;
-    font-size: 2.2rem;
+    font-size: 1.9rem;
     font-weight: 700;
-    color: #111;
+    color: #1e293b;
     box-shadow: none;
 }
 
+.canvas-subtitle {
+    font-size: 0.95rem;
+    color: #64748b;
+    margin-top: 4px;
+}
+
+.canvas-header-right {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    flex-shrink: 0;
+}
+
+.progress-percent {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--primary-color);
+    min-width: 38px;
+    text-align: right;
+}
+
+.progress-percent.progress-percent-complete {
+    color: var(--accent-success);
+}
+
 .progress-bar-track {
-    width: 100%;
-    height: 6px;
+    width: 180px;
+    height: 8px;
     background: #e5e7eb;
     border-radius: 999px;
     overflow: hidden;
@@ -880,14 +917,6 @@ button {
 
 .progress-bar-fill.progress-bar-complete {
     background: #15803d;
-}
-
-.progress-label {
-    text-align: center;
-    font-size: 0.8rem;
-    color: #6b7280;
-    margin-top: 0.4rem;
-    letter-spacing: 0.01em;
 }
 
 .canvas-columns {
@@ -915,26 +944,27 @@ button {
 
 .phase-header {
     background: white;
-    border: 2px solid #111;
-    border-radius: 6px;
+    border: 1px solid #e2e8f0;
+    border-radius: 16px;
     padding: 1.25rem 1rem;
     text-align: center;
     position: relative;
     z-index: 2;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);
 }
 
 .phase-header h3 {
     margin: 0;
-    font-size: 1.3rem;
-    font-weight: 500;
-    color: #111;
+    font-size: 1.2rem;
+    font-weight: 600;
+    color: #1e293b;
     transition: 0.2s;
 }
 
 /* Phase Complete Styling */
 .phase-col.phase-completed .phase-header {
     border-color: var(--accent-success);
+    background: #f0fdf4;
 }
 .phase-col.phase-completed .phase-header h3 {
     color: var(--accent-success);
@@ -1020,7 +1050,7 @@ button {
     width: 26px;
     height: 26px;
     border-radius: 50%;
-    border: 2px solid #111;
+    border: 2px solid #cbd5e1;
     display: flex;
     justify-content: center;
     align-items: center;
@@ -1078,21 +1108,22 @@ button {
 .step-card {
     width: 100%;
     background: white;
-    border: 2px solid #111;
-    border-radius: 50px; /* Pill shape */
-    padding: 1.2rem 1.5rem;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px; /* Rounded rectangle */
+    padding: 1.1rem 1.5rem;
     box-sizing: border-box;
     display: flex;
     align-items: center;
     justify-content: center;
     min-height: 64px;
+    box-shadow: 0 1px 4px rgba(15, 23, 42, 0.04);
     transition: border-color 0.2s, background-color 0.2s;
     text-align: center;
 }
 
 .step-title {
-    font-size: 1.1rem;
-    color: #111;
+    font-size: 1.05rem;
+    color: #334155;
     font-weight: 500;
     transition: color 0.2s;
 }

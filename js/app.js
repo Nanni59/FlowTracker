@@ -1360,12 +1360,17 @@ ${dataSection.trim() ? 'Here is the project data:\n' + dataSection : 'Use the at
         this._prevBarPercent = percent;
 
         let html = `
-            <div class="canvas-title-wrapper">
-                <h2 class="canvas-title">${this._escapeHtml(fc.name)}</h2>
-                <div class="progress-bar-track">
-                    <div class="progress-bar-fill${isFullyComplete ? ' progress-bar-complete' : ''}" style="--prev-width: ${prevPercent}%; --target-width: ${percent}%"></div>
+            <div class="canvas-header-card">
+                <div class="canvas-header-left">
+                    <h2 class="canvas-title">${this._escapeHtml(fc.name)}</h2>
+                    <div class="canvas-subtitle">${completedSteps} / ${totalSteps} steps complete</div>
                 </div>
-                <div class="progress-label">${completedSteps} / ${totalSteps} steps complete</div>
+                <div class="canvas-header-right">
+                    <div class="progress-bar-track">
+                        <div class="progress-bar-fill${isFullyComplete ? ' progress-bar-complete' : ''}" style="--prev-width: ${prevPercent}%; --target-width: ${percent}%"></div>
+                    </div>
+                    <span class="progress-percent${isFullyComplete ? ' progress-percent-complete' : ''}">${percent}%</span>
+                </div>
             </div>
             <div class="canvas-columns">
         `;
