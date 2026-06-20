@@ -572,6 +572,8 @@ class App {
                 menu.id = 'step-context-menu';
                 menu.className = 'step-context-menu';
                 menu.innerHTML = `
+                    <button data-action="rename">Rename Step</button>
+                    <div class="context-menu-divider"></div>
                     <button data-action="before">Add Step Before</button>
                     <button data-action="after">Add Step After</button>
                     <div class="context-menu-divider"></div>
@@ -601,6 +603,21 @@ class App {
                     if (!phase) return;
                     const idx = phase.steps.findIndex(s => s.id === stepId);
                     if (idx === -1) return;
+
+                    if (action === 'rename') {
+                        const newName = await this.showCustomModal({
+                            title: "Rename Step",
+                            message: "Enter new step description:",
+                            initialValue: phase.steps[idx].title,
+                            type: "text"
+                        });
+                        if (newName && newName.trim() && newName.trim() !== phase.steps[idx].title) {
+                            phase.steps[idx].title = newName.trim();
+                            this.library.saveData();
+                            this.renderFlowchartCanvas(fc);
+                        }
+                        return;
+                    }
 
                     if (action === 'delete') {
                         const confirmed = await this.showCustomModal({
