@@ -70,6 +70,7 @@ class App {
         this.renderSidebar();
         this.renderMainContent();
         this.attachListeners();
+        this._initThemedSelects();
     }
 
     _escapeHtml(unsafe) {
@@ -104,8 +105,10 @@ class App {
             titleEl.textContent = options.title || 'Prompt';
             msgEl.textContent = options.message || '';
             
+            const selDD = inputSel._ftDD;   // custom dropdown overlay, if themed
             inputTxt.style.display = 'none';
-            inputSel.style.display = 'none';
+            if (selDD) selDD.style.display = 'none';
+            else inputSel.style.display = 'none';
 
             let firstFocusable = btnCancel;
 
@@ -114,7 +117,6 @@ class App {
                 inputTxt.value = options.initialValue || '';
                 firstFocusable = inputTxt;
             } else if (options.type === 'select') {
-                inputSel.style.display = 'block';
                 inputSel.innerHTML = '';
                 (options.selectOptions || []).forEach(opt => {
                     const o = document.createElement('option');
@@ -122,12 +124,19 @@ class App {
                     o.textContent = opt.label;
                     inputSel.appendChild(o);
                 });
-                firstFocusable = inputSel;
+                if (selDD) {
+                    selDD.style.display = 'block';
+                    selDD.classList.remove('open');
+                    firstFocusable = selDD.querySelector('.ft-dd-head');
+                } else {
+                    inputSel.style.display = 'block';
+                    firstFocusable = inputSel;
+                }
             }
 
             const getFocusableElements = () => {
                 return Array.from(dialog.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'))
-                    .filter(el => el.style.display !== 'none' && !el.disabled);
+                    .filter(el => el.style.display !== 'none' && !el.disabled && !el.classList.contains('ft-dd-opt'));
             };
 
             const handleTrap = (e) => {
@@ -558,108 +567,304 @@ class App {
             });
 
             this.els.viewModalContent.addEventListener('contextmenu', (e) => {
-                const row = e.target.closest('.step-row');
-                if (!row) return;
-                e.preventDefault();
-
-                const stepId = row.dataset.stepId;
-                const phaseId = row.dataset.phaseId;
-
-                // Remove any existing context menu
-                document.getElementById('step-context-menu')?.remove();
-
-                const menu = document.createElement('div');
-                menu.id = 'step-context-menu';
-                menu.className = 'step-context-menu';
-                menu.innerHTML = `
-                    <button data-action="rename">Rename Step</button>
-                    <div class="context-menu-divider"></div>
-                    <button data-action="before">Add Step Before</button>
-                    <button data-action="after">Add Step After</button>
-                    <div class="context-menu-divider"></div>
-                    <button data-action="delete" class="context-menu-danger">Delete Step</button>
-                `;
-
-                // Position near cursor, keeping within viewport
-                document.body.appendChild(menu);
-                const menuW = menu.offsetWidth;
-                const menuH = menu.offsetHeight;
-                let x = e.clientX;
-                let y = e.clientY;
-                if (x + menuW > window.innerWidth)  x = window.innerWidth - menuW - 8;
-                if (y + menuH > window.innerHeight) y = window.innerHeight - menuH - 8;
-                menu.style.left = x + 'px';
-                menu.style.top  = y + 'px';
-
-                const dismiss = () => menu.remove();
-
-                menu.addEventListener('click', async (ev) => {
-                    const action = ev.target.closest('button')?.dataset.action;
-                    if (!action) return;
-                    dismiss();
-
-                    const fc = this.library.getFlowchart(this.state.viewingFlowchartId);
-                    const phase = fc.phases.find(p => p.id === phaseId);
-                    if (!phase) return;
-                    const idx = phase.steps.findIndex(s => s.id === stepId);
-                    if (idx === -1) return;
-
-                    if (action === 'rename') {
-                        const newName = await this.showCustomModal({
-                            title: "Rename Step",
-                            message: "Enter new step description:",
-                            initialValue: phase.steps[idx].title,
-                            type: "text"
-                        });
-                        if (newName && newName.trim() && newName.trim() !== phase.steps[idx].title) {
-                            phase.steps[idx].title = newName.trim();
-                            this.library.saveData();
-                            this.renderFlowchartCanvas(fc);
-                        }
-                        return;
-                    }
-
-                    if (action === 'delete') {
-                        const confirmed = await this.showCustomModal({
-                            title: "Delete Step",
-                            message: `Delete "${phase.steps[idx].title}"?`,
-                            type: "confirm"
-                        });
-                        if (!confirmed) return;
-                        phase.steps.splice(idx, 1);
-                        this.library.saveData();
-                        this.renderFlowchartCanvas(fc);
-                        return;
-                    }
-
-                    const name = await this.showCustomModal({ title: "New Step", message: "Enter step description:", type: "text" });
-                    if (!name || !name.trim()) return;
-                    const newStep = { id: 's-' + Date.now(), title: name.trim(), completed: false };
-                    const insertAt = action === 'before' ? idx : idx + 1;
-                    phase.steps.splice(insertAt, 0, newStep);
-                    this.library.saveData();
-                    this.renderFlowchartCanvas(fc);
-                });
-
-                // Dismiss on outside click, Escape, or scroll
-                const onDismiss = (ev) => {
-                    if (!menu.contains(ev.target)) {
-                        dismiss();
-                        cleanup();
-                    }
-                };
-                const onKey = (ev) => { if (ev.key === 'Escape') { dismiss(); cleanup(); } };
-                const cleanup = () => {
-                    document.removeEventListener('click', onDismiss);
-                    document.removeEventListener('keydown', onKey);
-                };
-                // Defer so this contextmenu event doesn't immediately close the menu
-                setTimeout(() => document.addEventListener('click', onDismiss), 0);
-                document.addEventListener('keydown', onKey);
+                const stepRow = e.target.closest('.step-row');
+                if (stepRow) {
+                    e.preventDefault();
+                    this._openStepContextMenu(e, stepRow);
+                    return;
+                }
+                const phaseHeader = e.target.closest('.phase-header');
+                if (phaseHeader) {
+                    e.preventDefault();
+                    const phaseCol = phaseHeader.closest('.phase-col');
+                    if (phaseCol) this._openPhaseContextMenu(e, phaseCol);
+                }
             });
         }
 
         this.attachDragAndDrop();
+    }
+
+    // ===== Right-click Context Menus (steps & phases) =====
+
+    // Generic menu renderer. `items` is an array of
+    //   { label, onClick, danger } | { divider: true }
+    // Leading/trailing/duplicate dividers are normalized away so callers can
+    // conditionally include entries without worrying about stray separators.
+    _openContextMenu(e, items) {
+        const normalized = [];
+        items.forEach(it => {
+            if (it.divider) {
+                if (normalized.length === 0 || normalized[normalized.length - 1].divider) return;
+            }
+            normalized.push(it);
+        });
+        while (normalized.length && normalized[normalized.length - 1].divider) normalized.pop();
+
+        // Remove any existing context menu
+        document.getElementById('fc-context-menu')?.remove();
+
+        const menu = document.createElement('div');
+        menu.id = 'fc-context-menu';
+        menu.className = 'step-context-menu';
+        menu.innerHTML = normalized.map((it, i) =>
+            it.divider
+                ? '<div class="context-menu-divider"></div>'
+                : `<button data-idx="${i}"${it.danger ? ' class="context-menu-danger"' : ''}>${this._escapeHtml(it.label)}</button>`
+        ).join('');
+
+        // Position near cursor, keeping within viewport
+        document.body.appendChild(menu);
+        const menuW = menu.offsetWidth;
+        const menuH = menu.offsetHeight;
+        let x = e.clientX;
+        let y = e.clientY;
+        if (x + menuW > window.innerWidth)  x = window.innerWidth - menuW - 8;
+        if (y + menuH > window.innerHeight) y = window.innerHeight - menuH - 8;
+        menu.style.left = x + 'px';
+        menu.style.top  = y + 'px';
+
+        const cleanup = () => {
+            document.removeEventListener('click', onDismiss);
+            document.removeEventListener('keydown', onKey);
+        };
+        const dismiss = () => { menu.remove(); cleanup(); };
+        const onDismiss = (ev) => { if (!menu.contains(ev.target)) dismiss(); };
+        const onKey = (ev) => { if (ev.key === 'Escape') dismiss(); };
+
+        menu.addEventListener('click', (ev) => {
+            const btn = ev.target.closest('button');
+            if (!btn) return;
+            const it = normalized[parseInt(btn.dataset.idx, 10)];
+            dismiss();
+            if (it && it.onClick) it.onClick();
+        });
+
+        // Defer so this contextmenu event doesn't immediately close the menu
+        setTimeout(() => document.addEventListener('click', onDismiss), 0);
+        document.addEventListener('keydown', onKey);
+    }
+
+    _openStepContextMenu(e, row) {
+        const stepId = row.dataset.stepId;
+        const phaseId = row.dataset.phaseId;
+        const fc = this.library.getFlowchart(this.state.viewingFlowchartId);
+        const phase = fc?.phases.find(p => p.id === phaseId);
+        if (!phase) return;
+        const idx = phase.steps.findIndex(s => s.id === stepId);
+        if (idx === -1) return;
+
+        const insertStep = async (insertAt) => {
+            const name = await this.showCustomModal({ title: "New Step", message: "Enter step description:", type: "text" });
+            if (!name || !name.trim()) return;
+            phase.steps.splice(insertAt, 0, { id: 's-' + Date.now(), title: name.trim(), completed: false });
+            this.library.saveData();
+            this.renderFlowchartCanvas(fc);
+        };
+
+        const items = [
+            { label: "Rename Step", onClick: async () => {
+                const newName = await this.showCustomModal({
+                    title: "Rename Step",
+                    message: "Enter new step description:",
+                    initialValue: phase.steps[idx].title,
+                    type: "text"
+                });
+                if (newName && newName.trim() && newName.trim() !== phase.steps[idx].title) {
+                    phase.steps[idx].title = newName.trim();
+                    this.library.saveData();
+                    this.renderFlowchartCanvas(fc);
+                }
+            }},
+            { divider: true },
+        ];
+
+        if (idx > 0) items.push({ label: "Move Step Up", onClick: () => this._moveStep(fc, phase, idx, -1) });
+        if (idx < phase.steps.length - 1) items.push({ label: "Move Step Down", onClick: () => this._moveStep(fc, phase, idx, 1) });
+
+        items.push(
+            { divider: true },
+            { label: "Add Step Before", onClick: () => insertStep(idx) },
+            { label: "Add Step After", onClick: () => insertStep(idx + 1) },
+            { divider: true },
+            { label: "Delete Step", danger: true, onClick: async () => {
+                const confirmed = await this.showCustomModal({
+                    title: "Delete Step",
+                    message: `Delete "${phase.steps[idx].title}"?`,
+                    type: "confirm"
+                });
+                if (!confirmed) return;
+                phase.steps.splice(idx, 1);
+                this.library.saveData();
+                this.renderFlowchartCanvas(fc);
+            }}
+        );
+
+        this._openContextMenu(e, items);
+    }
+
+    _openPhaseContextMenu(e, phaseCol) {
+        const phaseId = phaseCol.dataset.phaseId;
+        const fc = this.library.getFlowchart(this.state.viewingFlowchartId);
+        if (!fc) return;
+        const pIdx = fc.phases.findIndex(p => p.id === phaseId);
+        if (pIdx === -1) return;
+        const phase = fc.phases[pIdx];
+
+        const items = [
+            { label: "Rename Phase", onClick: async () => {
+                const newName = await this.showCustomModal({
+                    title: "Rename Phase",
+                    message: "Enter new phase title:",
+                    initialValue: phase.title,
+                    type: "text"
+                });
+                if (newName && newName.trim() && newName.trim() !== phase.title) {
+                    phase.title = newName.trim();
+                    this.library.saveData();
+                    this.renderFlowchartCanvas(fc);
+                    this.renderSidebar();
+                }
+            }},
+            { divider: true },
+        ];
+
+        if (pIdx > 0) items.push({ label: "Move Phase Left", onClick: () => this._movePhase(fc, pIdx, -1) });
+        if (pIdx < fc.phases.length - 1) items.push({ label: "Move Phase Right", onClick: () => this._movePhase(fc, pIdx, 1) });
+
+        items.push(
+            { label: "Add Step", onClick: async () => {
+                const name = await this.showCustomModal({ title: "New Step", message: "Enter step description:", type: "text" });
+                if (!name || !name.trim()) return;
+                phase.steps.push({ id: 's-' + Date.now(), title: name.trim(), completed: false });
+                this.library.saveData();
+                this.renderFlowchartCanvas(fc);
+            }},
+            { divider: true },
+            { label: "Delete Phase", danger: true, onClick: async () => {
+                const confirmed = await this.showCustomModal({
+                    title: "Delete Phase",
+                    message: `Delete "${phase.title}" and all of its steps?`,
+                    type: "confirm"
+                });
+                if (!confirmed) return;
+                fc.phases.splice(pIdx, 1);
+                this.library.saveData();
+                this.renderFlowchartCanvas(fc);
+                this.renderSidebar();
+            }}
+        );
+
+        this._openContextMenu(e, items);
+    }
+
+    _moveStep(fc, phase, idx, dir) {
+        const target = idx + dir;
+        if (target < 0 || target >= phase.steps.length) return;
+        const [moved] = phase.steps.splice(idx, 1);
+        phase.steps.splice(target, 0, moved);
+        this.library.saveData();
+        this.renderFlowchartCanvas(fc);
+    }
+
+    _movePhase(fc, idx, dir) {
+        const target = idx + dir;
+        if (target < 0 || target >= fc.phases.length) return;
+        const [moved] = fc.phases.splice(idx, 1);
+        fc.phases.splice(target, 0, moved);
+        this.library.saveData();
+        this.renderFlowchartCanvas(fc);
+        this.renderSidebar();
+    }
+
+    // ===== Custom themed dropdowns (mirrors Course Planner's .cp-dd) =====
+    // Replaces a native <select> with a styled head + popup list. The native
+    // <select> stays in the DOM (hidden) as the source of truth — its .value,
+    // option list, and programmatic value/selectedIndex assignments are mirrored
+    // into the overlay both ways, so existing reads/writes keep working.
+
+    _closeAllDropdowns(except) {
+        document.querySelectorAll('.ft-dd.open').forEach(d => {
+            if (d !== except) d.classList.remove('open');
+        });
+    }
+
+    _initThemedSelects() {
+        document.addEventListener('click', () => this._closeAllDropdowns(null));
+        this._enhanceSelect(this.els.aiModelSelect);
+        this._enhanceSelect(document.getElementById('customModalInputSelect'));
+    }
+
+    _enhanceSelect(sel) {
+        if (!sel || sel.dataset.ftThemed) return;
+        sel.dataset.ftThemed = '1';
+        sel.style.display = 'none';
+
+        const chev = '<span class="ft-dd-chev"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg></span>';
+
+        const dd = document.createElement('div');
+        dd.className = 'ft-dd';
+        const head = document.createElement('button');
+        head.type = 'button';
+        head.className = 'ft-dd-head';
+        head.innerHTML = '<span class="ft-dd-val"></span>' + chev;
+        const list = document.createElement('div');
+        list.className = 'ft-dd-list';
+        dd.appendChild(head);
+        dd.appendChild(list);
+        sel.parentNode.insertBefore(dd, sel.nextSibling);
+        sel._ftDD = dd;
+
+        const valEl = head.querySelector('.ft-dd-val');
+        const sync = () => {
+            const opt = sel.options[sel.selectedIndex];
+            valEl.textContent = opt ? opt.textContent : '';
+            list.querySelectorAll('.ft-dd-opt').forEach(b =>
+                b.classList.toggle('on', b.dataset.val === sel.value && !b.classList.contains('disabled')));
+        };
+        const rebuild = () => {
+            list.innerHTML = '';
+            Array.from(sel.options).forEach(opt => {
+                const b = document.createElement('button');
+                b.type = 'button';
+                b.className = 'ft-dd-opt' + (opt.disabled ? ' disabled' : '');
+                b.dataset.val = opt.value;
+                b.textContent = opt.textContent;
+                if (!opt.disabled) {
+                    b.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        sel.value = opt.value;
+                        dd.classList.remove('open');
+                        sel.dispatchEvent(new Event('change', { bubbles: true }));
+                    });
+                }
+                list.appendChild(b);
+            });
+            sync();
+        };
+        head.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const open = dd.classList.contains('open');
+            this._closeAllDropdowns(dd);
+            dd.classList.toggle('open', !open);
+        });
+
+        // Mirror programmatic changes: option-list edits and direct
+        // value / selectedIndex assignment (e.g. resetting the model select).
+        new MutationObserver(rebuild).observe(sel, { childList: true });
+        sel.addEventListener('change', sync);
+        const proto = HTMLSelectElement.prototype;
+        ['value', 'selectedIndex'].forEach(prop => {
+            const desc = Object.getOwnPropertyDescriptor(proto, prop);
+            if (!desc) return;
+            Object.defineProperty(sel, prop, {
+                configurable: true,
+                get() { return desc.get.call(sel); },
+                set(v) { desc.set.call(sel, v); sync(); }
+            });
+        });
+
+        rebuild();
     }
 
     async addFlowchart(categoryId = null) {
@@ -1404,13 +1609,13 @@ ${dataSection.trim() ? 'Here is the project data:\n' + dataSection : 'Use the at
                 const phaseCompleteClass = isPhaseComplete ? 'phase-completed' : '';
 
                 html += `
-                    <div class="phase-col ${phaseCompleteClass}">
-                        <div class="phase-header">
+                    <div class="phase-col ${phaseCompleteClass}" data-phase-id="${phase.id}">
+                        <div class="phase-header" title="Right-click for phase options">
                             <h3>${this._escapeHtml(phase.title)}</h3>
                             ${phaseIndex < fc.phases.length - 1 ? `
                                 <div class="phase-connector ${phaseCompleteClass}">
                                     <svg width="48" height="20" viewBox="0 0 48 20" preserveAspectRatio="none">
-                                        <line class="phase-arrow-line" x1="0" y1="10" x2="38" y2="10" stroke="var(--primary-color)" stroke-width="2" stroke-linecap="round"/>
+                                        <line class="phase-arrow-line" x1="0" y1="10" x2="38" y2="10" stroke="var(--primary-color)" stroke-width="2" stroke-linecap="butt"/>
                                         <polygon class="phase-arrow-head" points="38,5.5 38,14.5 45,10" fill="var(--primary-color)" stroke="var(--primary-color)" stroke-width="1.5" stroke-linejoin="round"/>
                                     </svg>
                                 </div>
@@ -1439,7 +1644,7 @@ ${dataSection.trim() ? 'Here is the project data:\n' + dataSection : 'Use the at
                             <div class="step-row ${isChecked} ${nextChecked}" data-step-id="${step.id}" data-phase-id="${phase.id}">
                                 <div class="step-status">
                                     <div class="check-circle ${isChecked}">
-                                        <svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                                        <svg viewBox="0 0 24 24"><polyline points="20 6.5 9 17.5 4 12.5"></polyline></svg>
                                     </div>
                                     ${!isLast ? `<div class="status-line ${isChecked} ${nextChecked}"></div>` : ''}
                                 </div>
@@ -1450,7 +1655,7 @@ ${dataSection.trim() ? 'Here is the project data:\n' + dataSection : 'Use the at
                                     ${!isLast ? `
                                         <div class="card-arrow">
                                             <svg width="14" height="26">
-                                                <line class="arrow-line" x1="7" y1="0" x2="7" y2="19" stroke="var(--primary-color)" stroke-width="2" stroke-linecap="round"/>
+                                                <line class="arrow-line" x1="7" y1="0" x2="7" y2="18" stroke="var(--primary-color)" stroke-width="2" stroke-linecap="butt"/>
                                                 <polygon class="arrow-head" points="2.5,18 11.5,18 7,23.5" fill="var(--primary-color)" stroke="var(--primary-color)" stroke-width="1.5" stroke-linejoin="round"/>
                                             </svg>
                                         </div>

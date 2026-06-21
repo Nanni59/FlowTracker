@@ -770,22 +770,165 @@ button {
 
 .link-modal-select {
     width: 100%;
-    padding: 10px 12px;
-    border: 1px solid #ddd;
-    border-radius: 6px;
+    padding: 12px 40px 12px 14px;
+    border: 1.5px solid #d1d5db;
+    border-radius: 8px;
     font-family: inherit;
     font-size: 14px;
+    color: var(--text-primary);
     margin-bottom: 20px;
     box-sizing: border-box;
     background-color: #fff;
     cursor: pointer;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
-.link-modal-select:hover,
+.link-modal-select:hover {
+    border-color: #b8c0cc;
+}
+
 .link-modal-select:focus {
     outline: none;
     border-color: var(--primary-color);
-    box-shadow: 0 0 0 1px var(--primary-color);
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+}
+
+/* ===== No-JS fallback chevron for native selects =====
+   The selects below are normally replaced by the custom .ft-dd component
+   (see _enhanceSelect in app.js). If that script doesn't run, the native
+   select still gets a themed chevron instead of the OS arrow. */
+select.ai-input,
+.link-modal-select {
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 13px center;
+    background-size: 15px;
+}
+
+select.ai-input {
+    padding-right: 40px;
+    cursor: pointer;
+}
+
+select.ai-input::-ms-expand,
+.link-modal-select::-ms-expand {
+    display: none;
+}
+
+/* ===== Custom themed dropdown — mirrors the Course Planner .cp-dd component,
+   themed for FlowTracker (blue/white). A hidden native <select> stays the
+   source of truth; this .ft-dd overlay renders the head + popup list. ===== */
+.ft-dd {
+    position: relative;
+    width: 100%;
+}
+
+.ft-dd-head {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    font-family: inherit;
+    font-size: 0.9rem;
+    color: var(--text-primary);
+    text-align: left;
+    cursor: pointer;
+    background: #fff;
+    border: 1px solid #d1d5db;
+    border-radius: 8px;
+    padding: 10px 12px;
+    box-sizing: border-box;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.ft-dd-head:hover {
+    border-color: #b8c0cc;
+}
+
+.ft-dd-val {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.ft-dd-chev {
+    display: flex;
+    flex: none;
+    color: var(--text-secondary);
+    transition: transform 0.2s ease;
+}
+
+.ft-dd.open .ft-dd-head {
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+}
+
+.ft-dd.open .ft-dd-chev {
+    transform: rotate(180deg);
+}
+
+.ft-dd-list {
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 0;
+    right: 0;
+    z-index: 50;
+    background: #fff;
+    border-radius: 8px;
+    padding: 6px;
+    box-shadow: 0 4px 14px rgba(15, 23, 42, 0.10), 0 14px 32px rgba(15, 23, 42, 0.18);
+    max-height: 244px;
+    overflow-y: auto;
+    opacity: 0;
+    transform: translateY(-6px);
+    pointer-events: none;
+    transition: opacity 0.15s ease, transform 0.15s ease;
+}
+
+.ft-dd.open .ft-dd-list {
+    opacity: 1;
+    transform: none;
+    pointer-events: auto;
+}
+
+.ft-dd-opt {
+    display: block;
+    width: 100%;
+    text-align: left;
+    font-family: inherit;
+    font-size: 0.875rem;
+    color: var(--text-primary);
+    background: transparent;
+    border: none;
+    border-radius: 6px;
+    padding: 10px 12px;
+    cursor: pointer;
+    transition: background 0.12s ease;
+}
+
+.ft-dd-opt:hover {
+    background: #f1f5f9;
+}
+
+.ft-dd-opt.on {
+    background: var(--primary-color);
+    color: #fff;
+    font-weight: 600;
+}
+
+.ft-dd-opt.disabled {
+    color: #aab0c0;
+    cursor: default;
+    pointer-events: none;
+}
+
+/* Match the native select's spacing in the custom prompt/confirm modal. */
+.link-modal .ft-dd {
+    margin-bottom: 20px;
 }
 
 .link-modal-buttons {
@@ -951,6 +1094,13 @@ button {
     position: relative;
     z-index: 2;
     box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);
+    cursor: context-menu;
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.phase-header:hover {
+    border-color: var(--primary-color);
+    box-shadow: 0 4px 12px rgba(37, 99, 235, 0.1);
 }
 
 .phase-header h3 {
@@ -1028,13 +1178,19 @@ button {
     --next-step-card-height: 64px;
 }
 
+/* Hover affordance grows the circle via a box-shadow ring — NOT transform:
+   scale(). Scaling promotes the circle to a GPU layer that snaps to whole
+   pixels, and that snap differs at scale 1.0 vs 1.1, which jiggles the
+   checkmark by a subpixel. A shadow ring + drop shadow gives the same "pop"
+   without ever transforming the geometry, so the checkmark stays perfectly
+   still and centered in every state. */
 .step-row:hover .check-circle {
-    transform: scale(1.1);
-    box-shadow: 0 4px 10px rgba(0,0,0,0.08);
+    box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.15), 0 4px 10px rgba(0, 0, 0, 0.08);
     border-color: var(--primary-color);
 }
 
 .step-row.checked:hover .check-circle {
+    box-shadow: 0 0 0 4px rgba(21, 128, 61, 0.15), 0 4px 10px rgba(0, 0, 0, 0.08);
     border-color: var(--accent-success);
 }
 
