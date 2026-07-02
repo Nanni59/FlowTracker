@@ -25,6 +25,7 @@ class App {
             viewModalContent: document.getElementById('view-modal-content'),
             btnCloseView: document.getElementById('btn-close-view'),
             btnEditView: document.getElementById('btn-edit-view'),
+            btnClearFlowchart: document.getElementById('btn-clear-flowchart'),
             btnAddPhase: document.getElementById('btn-add-phase'),
             btnPrevFc: document.getElementById('btn-prev-fc'),
             btnNextFc: document.getElementById('btn-next-fc'),
@@ -502,6 +503,25 @@ class App {
                 this.els.jsonInput.value = JSON.stringify(fc.phases, null, 2);
                 this.els.jsonError.textContent = '';
                 this.els.jsonModal.classList.add('visible');
+            });
+        }
+
+        if (this.els.btnClearFlowchart) {
+            this.els.btnClearFlowchart.addEventListener('click', async () => {
+                if (!this.state.viewingFlowchartId) return;
+                const isConfirmed = await this.showCustomModal({
+                    title: "Clear Flowchart",
+                    message: "Are you sure you want to clear the canvas? This action cannot be undone.",
+                    type: "confirm"
+                });
+                if (!isConfirmed) return;
+
+                this.library.updateFlowchartData(this.state.viewingFlowchartId, []);
+                const fc = this.library.getFlowchart(this.state.viewingFlowchartId);
+                this._prevBarPercent = null;
+                this.renderFlowchartCanvas(fc);
+                this.renderSidebar();
+                this.renderMainContent();
             });
         }
 

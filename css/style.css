@@ -621,6 +621,11 @@ button {
     color: #111;
 }
 
+.danger-icon-btn:hover {
+    background: rgba(239, 68, 68, 0.08);
+    color: var(--accent-danger);
+}
+
 /* Empty state */
 .empty-state {
     grid-column: 1 / -1;
