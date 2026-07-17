@@ -10,7 +10,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Roboto+Condensed:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 
     <!-- App Styles -->
-    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="css/style.css?v=nested-22">
 </head>
 
 <body>
@@ -67,7 +67,7 @@
             </div>
             <div class="modal-body split-pane">
                 <div class="editor-pane" style="width:100%;">
-                    <textarea id="modal-raw-input" placeholder="Enter JSON data..."></textarea>
+                    <textarea id="modal-raw-input" placeholder='Array of phase nodes. Each node: { "title": "...", "children": [ ... ] } for a group, or { "title": "...", "completed": false } for a step. Nest "children" as deep as you like; ids are filled in automatically.'></textarea>
                 </div>
             </div>
             <div class="modal-footer" style="justify-content:space-between; align-items:center;">
@@ -88,6 +88,25 @@
                     </button>
                     <button id="btn-next-fc" class="icon-btn" title="Next Flowchart (→)">
                         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                    </button>
+                    <div style="width:1px; height:20px; background:#e2e8f0; margin:0 2px;"></div>
+                    <div class="view-mode-toggle" id="btn-toggle-view" role="group" aria-label="View mode">
+                        <button class="vmt-btn active" data-mode="list" title="List view">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>
+                            <span>List</span>
+                        </button>
+                        <button class="vmt-btn" data-mode="map" title="Map view">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="5" rx="1"></rect><rect x="3" y="16" width="6" height="5" rx="1"></rect><rect x="15" y="16" width="6" height="5" rx="1"></rect><path d="M12 8v3M6 16v-2a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v2"></path></svg>
+                            <span>Map</span>
+                        </button>
+                    </div>
+                    <button id="btn-map-toggle-all" class="icon-btn map-only-control" title="Collapse all branches" aria-label="Collapse all branches">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <rect x="4" y="4" width="16" height="6" rx="1.5"></rect>
+                            <rect x="4" y="14" width="16" height="6" rx="1.5"></rect>
+                            <line x1="8" y1="7" x2="16" y2="7"></line>
+                            <line x1="8" y1="17" x2="16" y2="17"></line>
+                        </svg>
                     </button>
                     <div style="width:1px; height:20px; background:#e2e8f0; margin:0 2px;"></div>
                     <button id="btn-ai-generate" class="icon-btn" title="Generate with AI">
@@ -209,8 +228,8 @@
     </div>
 
     <!-- Scripts (Order Matters) -->
-    <script src="js/library.js"></script>
-    <script src="js/app.js"></script>
+    <script src="js/library.js?v=nested-22"></script>
+    <script src="js/app.js?v=nested-22"></script>
 </body>
 
 </html>

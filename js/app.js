@@ -8,6 +8,8 @@ class App {
         this.state = {
             currentSelection: 'general',
             viewingFlowchartId: null,
+            viewMode: 'list',                 // 'list' | 'map' — how the open flowchart is shown
+            collapsedNodes: new Set(),        // in-memory only (never persisted / exported)
             expandedCategories: new Set(JSON.parse(localStorage.getItem('expandedCategories') || '[]'))
         };
 
@@ -26,6 +28,8 @@ class App {
             btnCloseView: document.getElementById('btn-close-view'),
             btnEditView: document.getElementById('btn-edit-view'),
             btnClearFlowchart: document.getElementById('btn-clear-flowchart'),
+            btnToggleView: document.getElementById('btn-toggle-view'),
+            btnMapToggleAll: document.getElementById('btn-map-toggle-all'),
             btnAddPhase: document.getElementById('btn-add-phase'),
             btnPrevFc: document.getElementById('btn-prev-fc'),
             btnNextFc: document.getElementById('btn-next-fc'),
@@ -82,6 +86,101 @@ class App {
              .replace(/>/g, "&gt;")
              .replace(/"/g, "&quot;")
              .replace(/'/g, "&#039;");
+    }
+
+    // ===== Recursive node model helpers =====
+    // A node is { id, title, completed?, children?: [node] }.
+    // Container = has non-empty children (completion derived); leaf = checkable.
+
+    _uid(prefix = 'n') {
+        return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    }
+
+    // Container = has a `children` array (even if empty). Leaf = no children array.
+    // Keeping empty containers distinct from leaves means an empty phase counts as
+    // zero leaves (0 progress) rather than one unchecked step.
+    _isContainer(node) {
+        return !!node && Array.isArray(node.children);
+    }
+
+    // Friendly, standardized labels — the single place terminology is decided.
+    _nodeTypeName(depth, isContainer) {
+        if (isContainer) return depth === 0 ? 'Phase' : (depth === 1 ? 'Subphase' : 'Group');
+        return depth <= 1 ? 'Step' : 'Substep';
+    }
+
+    // Number each role independently in depth-first display order. Numbers are
+    // derived at render time, so moving nodes immediately updates both views
+    // without storing presentation data in the flowchart JSON.
+    _buildNodeSequenceNumbers(nodes) {
+        const counters = new Map();
+        const sequence = new Map();
+        const walk = (arr, depth) => (arr || []).forEach(node => {
+            const isContainer = this._isContainer(node);
+            const typeName = this._nodeTypeName(depth, isContainer);
+            const number = (counters.get(typeName) || 0) + 1;
+            counters.set(typeName, number);
+            sequence.set(node.id, { typeName, number, label: `${typeName} ${number}` });
+            if (isContainer) walk(node.children, depth + 1);
+        });
+        walk(nodes, 0);
+        return sequence;
+    }
+
+    // Avoid visual duplication when an existing title was manually prefixed
+    // with the same sequence label (for example, "Phase 1: Planning").
+    _displayNodeTitle(title, sequenceLabel) {
+        const value = String(title ?? '').trim();
+        if (!sequenceLabel) return value;
+        const escapedLabel = sequenceLabel.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const redundantPrefix = new RegExp(`^${escapedLabel}(?=\\s*(?:$|[:\\-–—]))\\s*[:\\-–—]?\\s*`, 'i');
+        return value.replace(redundantPrefix, '').trim();
+    }
+
+    // Count leaves recursively → progress across arbitrary nesting.
+    _progress(nodes) {
+        let total = 0, completed = 0;
+        const walk = (arr) => (arr || []).forEach(n => {
+            if (this._isContainer(n)) walk(n.children);
+            else { total++; if (n.completed) completed++; }
+        });
+        walk(nodes);
+        return { total, completed };
+    }
+
+    _isComplete(node) {
+        if (this._isContainer(node)) {
+            const { total, completed } = this._progress(node.children);
+            return total > 0 && completed === total;
+        }
+        return !!node.completed;
+    }
+
+    // Locate a node anywhere in the tree → { node, parentArray, index, depth }.
+    _findNode(nodes, id, depth = 0) {
+        const arr = nodes || [];
+        for (let i = 0; i < arr.length; i++) {
+            const n = arr[i];
+            if (n.id === id) return { node: n, parentArray: arr, index: i, depth };
+            if (Array.isArray(n.children) && n.children.length) {
+                const found = this._findNode(n.children, id, depth + 1);
+                if (found) return found;
+            }
+        }
+        return null;
+    }
+
+    _moveNode(fc, id, dir) {
+        const found = this._findNode(fc.phases, id);
+        if (!found) return;
+        const { parentArray, index } = found;
+        const target = index + dir;
+        if (target < 0 || target >= parentArray.length) return;
+        const [moved] = parentArray.splice(index, 1);
+        parentArray.splice(target, 0, moved);
+        this.library.saveData();
+        this.renderFlowchartCanvas(fc);
+        this.renderSidebar();
     }
 
     showCustomModal(options) {
@@ -488,7 +587,7 @@ class App {
                 const name = await this.showCustomModal({ title: "New Phase", message: "Enter phase title:", type: "text" });
                 if (name && name.trim()) {
                     const fc = this.library.getFlowchart(this.state.viewingFlowchartId);
-                    fc.phases.push({ id: 'p-' + Date.now(), title: name.trim(), steps: [] });
+                    fc.phases.push({ id: this._uid('p'), title: name.trim(), children: [] });
                     this.library.saveData();
                     this.renderFlowchartCanvas(fc);
                     this.renderSidebar();
@@ -525,6 +624,38 @@ class App {
             });
         }
 
+        if (this.els.btnToggleView) {
+            this.els.btnToggleView.addEventListener('click', (e) => {
+                const btn = e.target.closest('.vmt-btn');
+                if (!btn || !this.state.viewingFlowchartId) return;
+                const mode = btn.dataset.mode;
+                if (mode === this.state.viewMode) return;
+                this.state.viewMode = mode;
+                this._prevBarPercent = null;
+                this._updateViewModeToggle();
+                const fc = this.library.getFlowchart(this.state.viewingFlowchartId);
+                if (fc) this.renderFlowchartCanvas(fc);
+            });
+        }
+
+        if (this.els.btnMapToggleAll) {
+            this.els.btnMapToggleAll.addEventListener('click', () => {
+                if (this.state.viewMode !== 'map' || !this.state.viewingFlowchartId) return;
+                const fc = this.library.getFlowchart(this.state.viewingFlowchartId);
+                if (!fc) return;
+
+                const expandableIds = this._getExpandableNodeIds(fc.phases);
+                if (!expandableIds.length) return;
+                const allCollapsed = expandableIds.every(id => this.state.collapsedNodes.has(id));
+
+                expandableIds.forEach(id => {
+                    if (allCollapsed) this.state.collapsedNodes.delete(id);
+                    else this.state.collapsedNodes.add(id);
+                });
+                this.renderFlowchartCanvas(fc);
+            });
+        }
+
         this.attachAiListeners();
 
         if (this.els.btnCloseJson) {
@@ -538,13 +669,17 @@ class App {
                 try {
                     const parsed = JSON.parse(this.els.jsonInput.value);
                     if (Array.isArray(parsed)) {
-                        this.library.updateFlowchartData(this.state.viewingFlowchartId, parsed);
+                        // Normalize hand-edited JSON: assign ids, migrate steps->children,
+                        // default completed on leaves — so partial edits stay valid.
+                        const nodes = this.library.normalizeNodes(parsed);
+                        this.library.updateFlowchartData(this.state.viewingFlowchartId, nodes);
                         this.els.jsonModal.classList.remove('visible');
                         const fc = this.library.getFlowchart(this.state.viewingFlowchartId);
+                        this._prevBarPercent = null;
                         this.renderFlowchartCanvas(fc);
                         this.renderSidebar();
                     } else {
-                        this.els.jsonError.textContent = 'JSON must be an array of phases.';
+                        this.els.jsonError.textContent = 'JSON must be an array of phase nodes.';
                     }
                 } catch (e) {
                     this.els.jsonError.textContent = 'Invalid JSON format.';
@@ -555,49 +690,45 @@ class App {
         // Flowchart Canvas Interactions (delegated on view modal content)
         if (this.els.viewModalContent) {
             this.els.viewModalContent.addEventListener('click', async (e) => {
-                if (e.target.closest('.btn-add-step')) {
-                    const phaseId = e.target.closest('.btn-add-step').dataset.phaseId;
-                    const name = await this.showCustomModal({ title: "New Step", message: "Enter step description:", type: "text" });
-                    if (name && name.trim()) {
-                        const fc = this.library.getFlowchart(this.state.viewingFlowchartId);
-                        const phase = fc.phases.find(p => p.id === phaseId);
-                        if (phase) {
-                            phase.steps.push({ id: 's-' + Date.now(), title: name.trim(), completed: false });
-                            this.library.saveData();
-                            this.renderFlowchartCanvas(fc);
-                        }
-                    }
+                // Add a step (leaf) into a phase/container
+                const addBtn = e.target.closest('.btn-add-step');
+                if (addBtn) {
+                    await this._addChildLeaf(addBtn.dataset.nodeId);
+                    return;
                 }
 
-                if (e.target.closest('.step-row')) {
-                    const row = e.target.closest('.step-row');
-                    const stepId = row.dataset.stepId;
-                    const phaseId = row.dataset.phaseId;
-                    const fc = this.library.getFlowchart(this.state.viewingFlowchartId);
-                    const phase = fc.phases.find(p => p.id === phaseId);
-                    if (phase) {
-                        const step = phase.steps.find(s => s.id === stepId);
-                        if (step) {
-                            step.completed = !step.completed;
-                            this.library.saveData();
-                            this.renderFlowchartCanvas(fc);
-                        }
+                // Collapse / expand a container
+                const subHeader = e.target.closest('.subphase-header');
+                if (subHeader) {
+                    const subEl = subHeader.closest('.subphase');
+                    if (subEl) this._toggleCollapse(subEl.dataset.nodeId);
+                    return;
+                }
+
+                // Toggle a leaf step's completion
+                const row = e.target.closest('.step-row');
+                if (row) {
+                    this._toggleLeafCompletion(row.dataset.nodeId);
+                    return;
+                }
+
+                // Map editing mirrors the list: leaf click toggles completion;
+                // container click collapses or expands its descendant branch.
+                const mapNode = e.target.closest('.ft-map-node[data-node-id]');
+                if (mapNode) {
+                    if (mapNode.dataset.mapAction === 'toggle-leaf') {
+                        this._toggleLeafCompletion(mapNode.dataset.nodeId);
+                    } else if (mapNode.dataset.mapAction === 'toggle-collapse') {
+                        this._toggleCollapse(mapNode.dataset.nodeId);
                     }
                 }
             });
 
             this.els.viewModalContent.addEventListener('contextmenu', (e) => {
-                const stepRow = e.target.closest('.step-row');
-                if (stepRow) {
+                const el = e.target.closest('[data-node-id]');
+                if (el) {
                     e.preventDefault();
-                    this._openStepContextMenu(e, stepRow);
-                    return;
-                }
-                const phaseHeader = e.target.closest('.phase-header');
-                if (phaseHeader) {
-                    e.preventDefault();
-                    const phaseCol = phaseHeader.closest('.phase-col');
-                    if (phaseCol) this._openPhaseContextMenu(e, phaseCol);
+                    this._openNodeContextMenu(e, el.dataset.nodeId);
                 }
             });
         }
@@ -665,136 +796,146 @@ class App {
         document.addEventListener('keydown', onKey);
     }
 
-    _openStepContextMenu(e, row) {
-        const stepId = row.dataset.stepId;
-        const phaseId = row.dataset.phaseId;
+    // ---- Small edit helpers shared by clicks and the context menu ----
+
+    _toggleCollapse(nodeId) {
+        if (!nodeId) return;
+        if (this.state.collapsedNodes.has(nodeId)) this.state.collapsedNodes.delete(nodeId);
+        else this.state.collapsedNodes.add(nodeId);
         const fc = this.library.getFlowchart(this.state.viewingFlowchartId);
-        const phase = fc?.phases.find(p => p.id === phaseId);
-        if (!phase) return;
-        const idx = phase.steps.findIndex(s => s.id === stepId);
-        if (idx === -1) return;
-
-        const insertStep = async (insertAt) => {
-            const name = await this.showCustomModal({ title: "New Step", message: "Enter step description:", type: "text" });
-            if (!name || !name.trim()) return;
-            phase.steps.splice(insertAt, 0, { id: 's-' + Date.now(), title: name.trim(), completed: false });
-            this.library.saveData();
-            this.renderFlowchartCanvas(fc);
-        };
-
-        const items = [
-            { label: "Rename Step", onClick: async () => {
-                const newName = await this.showCustomModal({
-                    title: "Rename Step",
-                    message: "Enter new step description:",
-                    initialValue: phase.steps[idx].title,
-                    type: "text"
-                });
-                if (newName && newName.trim() && newName.trim() !== phase.steps[idx].title) {
-                    phase.steps[idx].title = newName.trim();
-                    this.library.saveData();
-                    this.renderFlowchartCanvas(fc);
-                }
-            }},
-            { divider: true },
-        ];
-
-        if (idx > 0) items.push({ label: "Move Step Up", onClick: () => this._moveStep(fc, phase, idx, -1) });
-        if (idx < phase.steps.length - 1) items.push({ label: "Move Step Down", onClick: () => this._moveStep(fc, phase, idx, 1) });
-
-        items.push(
-            { divider: true },
-            { label: "Add Step Before", onClick: () => insertStep(idx) },
-            { label: "Add Step After", onClick: () => insertStep(idx + 1) },
-            { divider: true },
-            { label: "Delete Step", danger: true, onClick: async () => {
-                const confirmed = await this.showCustomModal({
-                    title: "Delete Step",
-                    message: `Delete "${phase.steps[idx].title}"?`,
-                    type: "confirm"
-                });
-                if (!confirmed) return;
-                phase.steps.splice(idx, 1);
-                this.library.saveData();
-                this.renderFlowchartCanvas(fc);
-            }}
-        );
-
-        this._openContextMenu(e, items);
+        if (fc) this.renderFlowchartCanvas(fc);
     }
 
-    _openPhaseContextMenu(e, phaseCol) {
-        const phaseId = phaseCol.dataset.phaseId;
+    _toggleLeafCompletion(nodeId) {
+        if (!nodeId) return;
         const fc = this.library.getFlowchart(this.state.viewingFlowchartId);
         if (!fc) return;
-        const pIdx = fc.phases.findIndex(p => p.id === phaseId);
-        if (pIdx === -1) return;
-        const phase = fc.phases[pIdx];
-
-        const items = [
-            { label: "Rename Phase", onClick: async () => {
-                const newName = await this.showCustomModal({
-                    title: "Rename Phase",
-                    message: "Enter new phase title:",
-                    initialValue: phase.title,
-                    type: "text"
-                });
-                if (newName && newName.trim() && newName.trim() !== phase.title) {
-                    phase.title = newName.trim();
-                    this.library.saveData();
-                    this.renderFlowchartCanvas(fc);
-                    this.renderSidebar();
-                }
-            }},
-            { divider: true },
-        ];
-
-        if (pIdx > 0) items.push({ label: "Move Phase Left", onClick: () => this._movePhase(fc, pIdx, -1) });
-        if (pIdx < fc.phases.length - 1) items.push({ label: "Move Phase Right", onClick: () => this._movePhase(fc, pIdx, 1) });
-
-        items.push(
-            { label: "Add Step", onClick: async () => {
-                const name = await this.showCustomModal({ title: "New Step", message: "Enter step description:", type: "text" });
-                if (!name || !name.trim()) return;
-                phase.steps.push({ id: 's-' + Date.now(), title: name.trim(), completed: false });
-                this.library.saveData();
-                this.renderFlowchartCanvas(fc);
-            }},
-            { divider: true },
-            { label: "Delete Phase", danger: true, onClick: async () => {
-                const confirmed = await this.showCustomModal({
-                    title: "Delete Phase",
-                    message: `Delete "${phase.title}" and all of its steps?`,
-                    type: "confirm"
-                });
-                if (!confirmed) return;
-                fc.phases.splice(pIdx, 1);
-                this.library.saveData();
-                this.renderFlowchartCanvas(fc);
-                this.renderSidebar();
-            }}
-        );
-
-        this._openContextMenu(e, items);
-    }
-
-    _moveStep(fc, phase, idx, dir) {
-        const target = idx + dir;
-        if (target < 0 || target >= phase.steps.length) return;
-        const [moved] = phase.steps.splice(idx, 1);
-        phase.steps.splice(target, 0, moved);
+        const found = this._findNode(fc.phases, nodeId);
+        if (!found || this._isContainer(found.node)) return;
+        found.node.completed = !found.node.completed;
         this.library.saveData();
         this.renderFlowchartCanvas(fc);
     }
 
-    _movePhase(fc, idx, dir) {
-        const target = idx + dir;
-        if (target < 0 || target >= fc.phases.length) return;
-        const [moved] = fc.phases.splice(idx, 1);
-        fc.phases.splice(target, 0, moved);
+    // Push a new leaf into a container (or an empty phase). Turns a leaf into a
+    // container if needed — this is how optional nesting is created.
+    async _addChildLeaf(nodeId, promptTitle = "New Step") {
+        const fc = this.library.getFlowchart(this.state.viewingFlowchartId);
+        const found = this._findNode(fc.phases, nodeId);
+        if (!found) return;
+        const name = await this.showCustomModal({ title: promptTitle, message: "Enter description:", type: "text" });
+        if (!name || !name.trim()) return;
+        const node = found.node;
+        if (!Array.isArray(node.children)) { node.children = []; delete node.completed; }
+        node.children.push({ id: this._uid('s'), title: name.trim(), completed: false });
+        this.state.collapsedNodes.delete(nodeId); // reveal the newly added child
         this.library.saveData();
         this.renderFlowchartCanvas(fc);
         this.renderSidebar();
+    }
+
+    // Add a container (subphase/group) child.
+    async _addChildContainer(nodeId, typeName) {
+        const fc = this.library.getFlowchart(this.state.viewingFlowchartId);
+        const found = this._findNode(fc.phases, nodeId);
+        if (!found) return;
+        const name = await this.showCustomModal({ title: `New ${typeName}`, message: `Enter ${typeName.toLowerCase()} title:`, type: "text" });
+        if (!name || !name.trim()) return;
+        const node = found.node;
+        if (!Array.isArray(node.children)) { node.children = []; delete node.completed; }
+        node.children.push({ id: this._uid('p'), title: name.trim(), children: [] });
+        this.state.collapsedNodes.delete(nodeId);
+        this.library.saveData();
+        this.renderFlowchartCanvas(fc);
+        this.renderSidebar();
+    }
+
+    // Unified right-click menu for any node (phase / subphase / step / substep).
+    _openNodeContextMenu(e, nodeId) {
+        const fc = this.library.getFlowchart(this.state.viewingFlowchartId);
+        if (!fc) return;
+        const found = this._findNode(fc.phases, nodeId);
+        if (!found) return;
+        const { node, parentArray, index, depth } = found;
+        const isContainer = this._isContainer(node);
+        const typeName = this._nodeTypeName(depth, isContainer);
+        const isTopLevel = depth === 0;
+
+        const rerender = (alsoSidebar) => {
+            this.library.saveData();
+            this.renderFlowchartCanvas(fc);
+            if (alsoSidebar) this.renderSidebar();
+        };
+
+        const insertSibling = async (insertAt) => {
+            const name = await this.showCustomModal({ title: `New ${typeName}`, message: "Enter description:", type: "text" });
+            if (!name || !name.trim()) return;
+            const sibling = isContainer
+                ? { id: this._uid('p'), title: name.trim(), children: [] }
+                : { id: this._uid('s'), title: name.trim(), completed: false };
+            parentArray.splice(insertAt, 0, sibling);
+            rerender(isTopLevel);
+        };
+
+        const items = [
+            { label: `Rename ${typeName}`, onClick: async () => {
+                const newName = await this.showCustomModal({
+                    title: `Rename ${typeName}`, message: "Enter new title:",
+                    initialValue: node.title, type: "text"
+                });
+                if (newName && newName.trim() && newName.trim() !== node.title) {
+                    node.title = newName.trim();
+                    rerender(isTopLevel);
+                }
+            }},
+            { divider: true },
+        ];
+
+        const upLabel = isTopLevel ? `Move ${typeName} Left` : `Move ${typeName} Up`;
+        const downLabel = isTopLevel ? `Move ${typeName} Right` : `Move ${typeName} Down`;
+        if (index > 0) items.push({ label: upLabel, onClick: () => this._moveNode(fc, nodeId, -1) });
+        if (index < parentArray.length - 1) items.push({ label: downLabel, onClick: () => this._moveNode(fc, nodeId, 1) });
+
+        items.push({ divider: true });
+
+        if (isContainer) {
+            // Containers can hold both leaves and sub-containers.
+            const childContainerName = this._nodeTypeName(depth + 1, true);
+            items.push(
+                { label: "Add Step", onClick: () => this._addChildLeaf(nodeId) },
+                { label: `Add ${childContainerName}`, onClick: () => this._addChildContainer(nodeId, childContainerName) }
+            );
+        } else {
+            // A leaf becomes a container the moment it gets a child.
+            items.push({ label: "Add Subitem", onClick: () => this._addChildLeaf(nodeId, "New Subitem") });
+        }
+
+        // Sibling insertion (skip for top-level phases — use the New Phase button).
+        if (!isTopLevel) {
+            items.push(
+                { divider: true },
+                { label: `Add ${typeName} Before`, onClick: () => insertSibling(index) },
+                { label: `Add ${typeName} After`, onClick: () => insertSibling(index + 1) }
+            );
+        }
+
+        items.push(
+            { divider: true },
+            { label: `Delete ${typeName}`, danger: true, onClick: async () => {
+                const { total } = this._progress(node.children || []);
+                const suffix = isContainer && total > 0 ? ` and all ${total} nested item${total === 1 ? '' : 's'}` : '';
+                const confirmed = await this.showCustomModal({
+                    title: `Delete ${typeName}`,
+                    message: `Delete "${node.title}"${suffix}?`,
+                    type: "confirm"
+                });
+                if (!confirmed) return;
+                parentArray.splice(index, 1);
+                rerender(true);
+            }}
+        );
+
+        this._openContextMenu(e, items);
     }
 
     // ===== Custom themed dropdowns (mirrors Course Planner's .cp-dd) =====
@@ -1245,11 +1386,73 @@ class App {
 
     openFlowchartView(fc) {
         this.state.viewingFlowchartId = fc.id;
+        this.state.viewMode = 'list';
+        this.state.collapsedNodes.clear();
         this._prevBarPercent = null;
         this.els.viewModalTitle.textContent = fc.name;
         this.els.viewModal.classList.add('visible');
+        this._updateViewModeToggle();
         this._updateNavButtons();
         this.renderFlowchartCanvas(fc);
+    }
+
+    _updateViewModeToggle() {
+        if (this.els.btnToggleView) {
+            this.els.btnToggleView.querySelectorAll('.vmt-btn').forEach(b => {
+                b.classList.toggle('active', b.dataset.mode === this.state.viewMode);
+            });
+        }
+        if (this.els.btnMapToggleAll) {
+            this.els.btnMapToggleAll.classList.toggle('visible', this.state.viewMode === 'map');
+        }
+    }
+
+    _getExpandableNodeIds(nodes) {
+        const ids = [];
+        const walk = (items) => {
+            (items || []).forEach(node => {
+                if (!this._isContainer(node) || !node.children.length) return;
+                ids.push(node.id);
+                walk(node.children);
+            });
+        };
+        walk(nodes);
+        return ids;
+    }
+
+    _updateMapToggleAllButton(fc) {
+        const button = this.els.btnMapToggleAll;
+        if (!button) return;
+
+        const isMap = this.state.viewMode === 'map';
+        button.classList.toggle('visible', isMap);
+        if (!isMap || !fc) return;
+
+        const expandableIds = this._getExpandableNodeIds(fc.phases);
+        const allCollapsed = expandableIds.length > 0
+            && expandableIds.every(id => this.state.collapsedNodes.has(id));
+        const label = allCollapsed ? 'Expand all branches' : 'Collapse all branches';
+
+        button.disabled = expandableIds.length === 0;
+        button.title = label;
+        button.setAttribute('aria-label', label);
+        button.innerHTML = allCollapsed ? `
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <rect x="4" y="4" width="16" height="6" rx="1.5"></rect>
+                <rect x="4" y="14" width="16" height="6" rx="1.5"></rect>
+                <line x1="8" y1="7" x2="16" y2="7"></line>
+                <line x1="12" y1="5" x2="12" y2="9"></line>
+                <line x1="8" y1="17" x2="16" y2="17"></line>
+                <line x1="12" y1="15" x2="12" y2="19"></line>
+            </svg>
+        ` : `
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <rect x="4" y="4" width="16" height="6" rx="1.5"></rect>
+                <rect x="4" y="14" width="16" height="6" rx="1.5"></rect>
+                <line x1="8" y1="7" x2="16" y2="7"></line>
+                <line x1="8" y1="17" x2="16" y2="17"></line>
+            </svg>
+        `;
     }
 
     // ===== AI Generation (Bring-Your-Own-Key) =====
@@ -1477,13 +1680,18 @@ class App {
 
         const promptText = `You are an expert project manager and system architect. Analyze the provided project overview, notes, Markdown/text files, PDF text, and/or images (which may contain messy handwriting) and convert them into a highly structured, sequential workflow.
 
-Break the work into logical "Phases". Each Phase contains a series of actionable "Steps".
+Break the work into logical "Phases". Each Phase contains actionable "Steps".
+
+Nesting is OPTIONAL. Only when the material is genuinely hierarchical, a Step may itself contain
+sub-steps (put them in that item's "children"). Keep the tree shallow — do not nest just for the
+sake of it. A simple project should stay a flat Phase → Step structure.
 
 Rules:
 1. Phase titles should be clear (e.g. "Phase 1: Planning").
-2. Keep step titles concise, clear, and actionable (ideally 3-7 words).
+2. Keep item titles concise, clear, and actionable (ideally 3-7 words).
 3. Order phases and steps in the sequence the work should be performed.
-4. Output only the structured data — no commentary.
+4. A leaf item (no children) is a checkable step. An item with "children" is a group/heading.
+5. Output only the structured data — no commentary.
 
 ${dataSection.trim() ? 'Here is the project data:\n' + dataSection : 'Use the attached file(s) as the project data.'}`;
 
@@ -1493,28 +1701,36 @@ ${dataSection.trim() ? 'Here is the project data:\n' + dataSection : 'Use the at
             parts.push({ inlineData: { mimeType: f.type, data } });
         }
 
+        // Gemini schemas can't be self-referential, so nest a bounded depth by hand:
+        // phase -> children(steps) -> children(sub-steps). Deeper input still works —
+        // the recursive normalizer below accepts whatever depth comes back.
+        const substepItems = {
+            type: 'OBJECT',
+            properties: { title: { type: 'STRING' } },
+            required: ['title']
+        };
+        const stepItems = {
+            type: 'OBJECT',
+            properties: {
+                title: { type: 'STRING' },
+                children: { type: 'ARRAY', items: substepItems }
+            },
+            required: ['title']
+        };
+        const phaseItems = {
+            type: 'OBJECT',
+            properties: {
+                title: { type: 'STRING' },
+                children: { type: 'ARRAY', items: stepItems }
+            },
+            required: ['title', 'children']
+        };
+
         const body = {
             contents: [{ parts }],
             generationConfig: {
                 responseMimeType: 'application/json',
-                responseSchema: {
-                    type: 'ARRAY',
-                    items: {
-                        type: 'OBJECT',
-                        properties: {
-                            title: { type: 'STRING' },
-                            steps: {
-                                type: 'ARRAY',
-                                items: {
-                                    type: 'OBJECT',
-                                    properties: { title: { type: 'STRING' } },
-                                    required: ['title']
-                                }
-                            }
-                        },
-                        required: ['title', 'steps']
-                    }
-                }
+                responseSchema: { type: 'ARRAY', items: phaseItems }
             }
         };
 
@@ -1560,17 +1776,36 @@ ${dataSection.trim() ? 'Here is the project data:\n' + dataSection : 'Use the at
             throw new Error('The AI returned invalid JSON. Try again or simplify the input.');
         }
 
-        // Normalize: assign fresh unique IDs + completed flags (never trust AI ids)
+        // Normalize recursively: assign fresh unique IDs + completed flags (never trust
+        // AI ids), accept either `children` or `steps`, to any depth returned.
         const now = Date.now();
-        return (Array.isArray(parsed) ? parsed : []).map((phase, i) => ({
-            id: `p-${now}-${i}`,
-            title: typeof phase.title === 'string' ? phase.title : `Phase ${i + 1}`,
-            steps: (Array.isArray(phase.steps) ? phase.steps : []).map((step, j) => ({
-                id: `s-${now}-${i}-${j}`,
-                title: typeof step.title === 'string' ? step.title : (typeof step === 'string' ? step : `Step ${j + 1}`),
-                completed: false
-            }))
-        }));
+        const normalize = (item, path, fallback) => {
+            const title = typeof item === 'string'
+                ? item
+                : (typeof item.title === 'string' ? item.title : fallback);
+            const kids = (item && typeof item === 'object')
+                ? (Array.isArray(item.children) ? item.children : (Array.isArray(item.steps) ? item.steps : null))
+                : null;
+            if (Array.isArray(kids) && kids.length > 0) {
+                return {
+                    id: `p-${now}-${path}`,
+                    title,
+                    children: kids.map((c, k) => normalize(c, `${path}-${k}`, `Item ${k + 1}`))
+                };
+            }
+            return { id: `s-${now}-${path}`, title, completed: false };
+        };
+
+        const topLevel = Array.isArray(parsed) ? parsed : [];
+        return topLevel.map((phase, i) => {
+            const node = normalize(phase, String(i), `Phase ${i + 1}`);
+            // Top-level items are phases (containers) — ensure a children array.
+            if (!Array.isArray(node.children)) {
+                delete node.completed;
+                node.children = [];
+            }
+            return node;
+        });
     }
 
     syncStepStatusAlignment() {
@@ -1591,19 +1826,23 @@ ${dataSection.trim() ? 'Here is the project data:\n' + dataSection : 'Use the at
         // Preserve horizontal scroll position across the full re-render
         const prevColumns = this.els.viewModalContent.querySelector('.canvas-columns');
         const prevScrollLeft = prevColumns ? prevColumns.scrollLeft : 0;
+        const prevMap = this.els.viewModalContent.querySelector('.ft-map');
+        const prevMapScrollLeft = prevMap ? prevMap.scrollLeft : 0;
+        const prevCanvasScrollTop = this.els.viewModalContent.scrollTop;
 
         this.els.viewModalContent.innerHTML = '';
 
         const canvas = document.createElement('div');
         canvas.className = 'flowchart-canvas';
 
-        const allSteps = fc.phases.flatMap(p => p.steps);
-        const totalSteps = allSteps.length;
-        const completedSteps = allSteps.filter(s => s.completed).length;
+        const { total: totalSteps, completed: completedSteps } = this._progress(fc.phases);
         const percent = totalSteps > 0 ? Math.round((completedSteps / totalSteps) * 100) : 0;
         const isFullyComplete = totalSteps > 0 && completedSteps === totalSteps;
         const prevPercent = this._prevBarPercent ?? 0;
         this._prevBarPercent = percent;
+
+        const isMap = this.state.viewMode === 'map';
+        this._updateMapToggleAllButton(fc);
 
         let html = `
             <div class="canvas-header-card">
@@ -1618,109 +1857,281 @@ ${dataSection.trim() ? 'Here is the project data:\n' + dataSection : 'Use the at
                     <span class="progress-percent${isFullyComplete ? ' progress-percent-complete' : ''}">${percent}%</span>
                 </div>
             </div>
-            <div class="canvas-columns">
         `;
 
-        if (fc.phases.length === 0) {
-            html += '<div style="display:flex; align-items:center; justify-content:center; width:100%; color:var(--text-secondary); font-style:italic; font-size:1.2rem;">No phases in this flowchart. Click "New Phase" to start.</div>';
-        } else {
-            fc.phases.forEach((phase, phaseIndex) => {
-                const isPhaseComplete = phase.steps.length > 0 && phase.steps.every(s => s.completed);
-                const phaseCompleteClass = isPhaseComplete ? 'phase-completed' : '';
+        html += isMap ? this._renderFlowchartMap(fc) : this._renderFlowchartColumns(fc);
 
-                html += `
-                    <div class="phase-col ${phaseCompleteClass}" data-phase-id="${phase.id}">
-                        <div class="phase-header" title="Right-click for phase options">
-                            <h3>${this._escapeHtml(phase.title)}</h3>
-                            ${phaseIndex < fc.phases.length - 1 ? `
-                                <div class="phase-connector ${phaseCompleteClass}">
-                                    <svg width="48" height="20" viewBox="0 0 48 20" preserveAspectRatio="none">
-                                        <line class="phase-arrow-line" x1="0" y1="10" x2="38" y2="10" stroke="var(--primary-color)" stroke-width="2" stroke-linecap="butt"/>
-                                        <polygon class="phase-arrow-head" points="38,5.5 38,14.5 45,10" fill="var(--primary-color)" stroke="var(--primary-color)" stroke-width="1.5" stroke-linejoin="round"/>
-                                    </svg>
-                                </div>
-                            ` : ''}
-                        </div>
-                `;
-
-                if (phase.steps.length > 0) {
-                    html += `
-                        <div class="s-connector">
-                            <svg width="20" height="30" viewBox="0 0 20 30" preserveAspectRatio="none">
-                                <path class="s-path" d="M 0,0 C 0,15 20,15 20,30" fill="none" stroke="var(--primary-color)" stroke-width="1.5" />
-                                <circle class="s-dot" cx="0" cy="0" r="2" fill="var(--primary-color)" />
-                                <circle class="s-dot" cx="20" cy="30" r="2" fill="var(--primary-color)" />
-                            </svg>
-                        </div>
-                        <div class="step-list">
-                    `;
-
-                    phase.steps.forEach((step, index) => {
-                        const isChecked = step.completed ? 'checked' : '';
-                        const isLast = index === phase.steps.length - 1;
-                        const nextChecked = (!isLast && phase.steps[index + 1].completed) ? 'next-checked' : '';
-
-                        html += `
-                            <div class="step-row ${isChecked} ${nextChecked}" data-step-id="${step.id}" data-phase-id="${phase.id}">
-                                <div class="step-status">
-                                    <div class="check-circle ${isChecked}">
-                                        <svg viewBox="0 0 24 24"><polyline points="20 6.5 9 17.5 4 12.5"></polyline></svg>
-                                    </div>
-                                    ${!isLast ? `<div class="status-line ${isChecked} ${nextChecked}"></div>` : ''}
-                                </div>
-                                <div class="step-card-wrapper">
-                                    <div class="step-card">
-                                        <span class="step-title">${this._escapeHtml(step.title)}</span>
-                                    </div>
-                                    ${!isLast ? `
-                                        <div class="card-arrow">
-                                            <svg width="14" height="26">
-                                                <line class="arrow-line" x1="7" y1="0" x2="7" y2="18" stroke="var(--primary-color)" stroke-width="2" stroke-linecap="butt"/>
-                                                <polygon class="arrow-head" points="2.5,18 11.5,18 7,23.5" fill="var(--primary-color)" stroke="var(--primary-color)" stroke-width="1.5" stroke-linejoin="round"/>
-                                            </svg>
-                                        </div>
-                                    ` : ''}
-                                </div>
-                            </div>
-                        `;
-                    });
-
-                    html += `
-                        </div>
-                    `;
-                }
-
-                const emptyPhaseClass = phase.steps.length === 0 ? 'empty-phase' : '';
-
-                html += `
-                        <div class="add-step-wrapper ${emptyPhaseClass}">
-                            <button class="btn-add-step" data-phase-id="${phase.id}">+ Add Step</button>
-                        </div>
-                    </div>
-                `;
-            });
-        }
-
-        html += `
-            </div>
-        `;
-        
         canvas.innerHTML = html;
         this.els.viewModalContent.appendChild(canvas);
 
         // Restore the horizontal scroll position so toggling a step doesn't jump back to Phase 1
         const newColumns = canvas.querySelector('.canvas-columns');
         if (newColumns) newColumns.scrollLeft = prevScrollLeft;
+        const newMap = canvas.querySelector('.ft-map');
+        if (newMap) newMap.scrollLeft = prevMapScrollLeft;
+        this.els.viewModalContent.scrollTop = prevCanvasScrollTop;
 
         // Hide the default modal header title since we have the large canvas title now
         this.els.viewModalTitle.style.display = 'none';
 
-        const syncAlignment = () => this.syncStepStatusAlignment();
-        syncAlignment();
-        requestAnimationFrame(syncAlignment);
-        if (document.fonts && document.fonts.ready) {
-            document.fonts.ready.then(syncAlignment);
+        if (!isMap) {
+            const syncAlignment = () => this.syncStepStatusAlignment();
+            syncAlignment();
+            requestAnimationFrame(syncAlignment);
+            if (document.fonts && document.fonts.ready) {
+                document.fonts.ready.then(syncAlignment);
+            }
+        } else {
+            const trim = () => this._trimMapSlack(canvas);
+            trim();
+            requestAnimationFrame(trim);
+            if (document.fonts && document.fonts.ready) {
+                document.fonts.ready.then(trim);
+            }
         }
+    }
+
+    // The centred org-chart leaves symmetric blank slack around the node cluster
+    // (a flexbox intrinsic-sizing quirk). When the tree overflows the frame, trim
+    // that slack with negative margins so scrolling reaches the true left/right
+    // edges with no dead gap. When it fits, leave it centred.
+    _trimMapSlack(canvas) {
+        const map = canvas.querySelector('.ft-map');
+        if (!map) return;
+        const rootUl = map.querySelector(':scope > ul');
+        const nodes = map.querySelectorAll('.ft-map-node');
+        if (!rootUl || !nodes.length) return;
+
+        rootUl.style.marginLeft = '';
+        rootUl.style.marginRight = '';
+        if (map.scrollWidth <= map.clientWidth + 1) return; // fits — keep centred
+
+        const ulBox = rootUl.getBoundingClientRect();
+        let minL = Infinity, maxR = -Infinity;
+        nodes.forEach(n => {
+            const r = n.getBoundingClientRect();
+            if (r.left < minL) minL = r.left;
+            if (r.right > maxR) maxR = r.right;
+        });
+        const leftGap = minL - ulBox.left;
+        const rightGap = ulBox.right - maxR;
+        if (leftGap > 2) rootUl.style.marginLeft = `${-leftGap}px`;
+        if (rightGap > 2) rootUl.style.marginRight = `${-rightGap}px`;
+    }
+
+    // ---- List view: top-level phases as horizontal columns; children nested ----
+
+    _renderFlowchartColumns(fc) {
+        let html = '<div class="canvas-columns">';
+
+        if (!fc.phases || fc.phases.length === 0) {
+            html += '<div style="display:flex; align-items:center; justify-content:center; width:100%; color:var(--text-secondary); font-style:italic; font-size:1.2rem;">No phases in this flowchart. Click "New Phase" to start.</div></div>';
+            return html;
+        }
+
+        const sequenceNumbers = this._buildNodeSequenceNumbers(fc.phases);
+
+        fc.phases.forEach((phase, phaseIndex) => {
+            const phaseCompleteClass = this._isComplete(phase) ? 'phase-completed' : '';
+            const hasChildren = Array.isArray(phase.children) && phase.children.length > 0;
+            const hasNesting = hasChildren && phase.children.some(node => this._isContainer(node));
+            const phaseSequence = sequenceNumbers.get(phase.id);
+            const phaseLabel = phaseSequence ? phaseSequence.label : `Phase ${phaseIndex + 1}`;
+            const phaseTitle = this._displayNodeTitle(phase.title, phaseLabel);
+
+            html += `
+                <div class="phase-col ${phaseCompleteClass} ${hasNesting ? 'has-nesting' : ''}" data-node-id="${phase.id}">
+                    <div class="phase-header" title="Right-click for phase options">
+                        <span class="phase-sequence-label">${phaseLabel}</span>
+                        ${phaseTitle ? `<h3>${this._escapeHtml(phaseTitle)}</h3>` : ''}
+                        ${phaseIndex < fc.phases.length - 1 ? `
+                            <div class="phase-connector ${phaseCompleteClass}">
+                                <svg width="48" height="20" viewBox="0 0 48 20" preserveAspectRatio="none">
+                                    <line class="phase-arrow-line" x1="0" y1="10" x2="38" y2="10" stroke="var(--primary-color)" stroke-width="2" stroke-linecap="butt"/>
+                                    <polygon class="phase-arrow-head" points="38,5.5 38,14.5 45,10" fill="var(--primary-color)" stroke="var(--primary-color)" stroke-width="1.5" stroke-linejoin="round"/>
+                                </svg>
+                            </div>
+                        ` : ''}
+                    </div>
+            `;
+
+            if (hasChildren) {
+                html += `
+                    <div class="s-connector">
+                        <svg width="20" height="30" viewBox="0 0 20 30" preserveAspectRatio="none">
+                            <path class="s-path" d="M 0,0 C 0,15 20,15 20,30" fill="none" stroke="var(--primary-color)" stroke-width="1.5" />
+                            <circle class="s-dot" cx="0" cy="0" r="2" fill="var(--primary-color)" />
+                            <circle class="s-dot" cx="20" cy="30" r="2" fill="var(--primary-color)" />
+                        </svg>
+                    </div>
+                    <div class="node-list">
+                        ${this._renderNodes(phase.children, 1, sequenceNumbers)}
+                    </div>
+                `;
+            }
+
+            const emptyPhaseClass = hasChildren ? '' : 'empty-phase';
+            html += `
+                    <div class="add-step-wrapper ${emptyPhaseClass}">
+                        <button class="btn-add-step" data-node-id="${phase.id}">+ Add Step</button>
+                    </div>
+                </div>
+            `;
+        });
+
+        html += '</div>';
+        return html;
+    }
+
+    // Render a sibling list of nodes at a given depth (leaves + containers mixed).
+    _renderNodes(nodes, depth, sequenceNumbers) {
+        return (nodes || []).map((node, index) =>
+            this._isContainer(node)
+                ? this._renderContainer(node, depth, nodes, index, sequenceNumbers)
+                : this._renderLeaf(node, depth, nodes, index, sequenceNumbers)
+        ).join('');
+    }
+
+    _renderLeaf(node, depth, siblings, index, sequenceNumbers) {
+        const isChecked = node.completed ? 'checked' : '';
+        const next = siblings[index + 1];
+        const sequence = sequenceNumbers.get(node.id);
+        const typeLabel = sequence ? sequence.label : this._nodeTypeName(depth, false);
+        const displayTitle = this._displayNodeTitle(node.title, typeLabel);
+        // Only chain the connector arrow/line to the next sibling when it's also a leaf.
+        const nextIsLeaf = !!next && !this._isContainer(next);
+        const drawConnector = nextIsLeaf;
+        const nextChecked = (nextIsLeaf && next.completed) ? 'next-checked' : '';
+
+        return `
+            <div class="step-row ${isChecked} ${nextChecked}" data-node-id="${node.id}">
+                <div class="step-status">
+                    <div class="check-circle ${isChecked}">
+                        <svg viewBox="0 0 24 24"><polyline points="20 6.5 9 17.5 4 12.5"></polyline></svg>
+                    </div>
+                    ${drawConnector ? `<div class="status-line ${isChecked} ${nextChecked}"></div>` : ''}
+                </div>
+                <div class="step-card-wrapper">
+                    <div class="step-card">
+                        <span class="step-sequence-label">${typeLabel}</span>
+                        ${displayTitle ? `<span class="step-title">${this._escapeHtml(displayTitle)}</span>` : ''}
+                    </div>
+                    ${drawConnector ? `
+                        <div class="card-arrow">
+                            <svg width="14" height="26">
+                                <line class="arrow-line" x1="7" y1="0" x2="7" y2="18" stroke="var(--primary-color)" stroke-width="2" stroke-linecap="butt"/>
+                                <polygon class="arrow-head" points="2.5,18 11.5,18 7,23.5" fill="var(--primary-color)" stroke="var(--primary-color)" stroke-width="1.5" stroke-linejoin="round"/>
+                            </svg>
+                        </div>
+                    ` : ''}
+                </div>
+            </div>
+        `;
+    }
+
+    _renderContainer(node, depth, siblings, index, sequenceNumbers) {
+        const collapsed = this.state.collapsedNodes.has(node.id);
+        const { total, completed } = this._progress(node.children);
+        const complete = total > 0 && completed === total;
+        const sequence = sequenceNumbers.get(node.id);
+        const typeLabel = sequence ? sequence.label : this._nodeTypeName(depth, true);
+        const displayTitle = this._displayNodeTitle(node.title, typeLabel);
+
+        const caret = collapsed
+            ? '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"></polyline></svg>'
+            : '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>';
+
+        return `
+            <div class="subphase ${complete ? 'complete' : ''} ${collapsed ? 'collapsed' : ''}" data-node-id="${node.id}">
+                <div class="subphase-header" title="Right-click for options">
+                    <span class="subphase-caret">${caret}</span>
+                    <span class="node-type-chip">${typeLabel}</span>
+                    ${displayTitle ? `<span class="subphase-title">${this._escapeHtml(displayTitle)}</span>` : ''}
+                    <span class="subphase-count">${completed}/${total}</span>
+                </div>
+                ${collapsed ? '' : `
+                    <div class="node-children">
+                        ${this._renderNodes(node.children, depth + 1, sequenceNumbers)}
+                        <div class="add-step-wrapper">
+                            <button class="btn-add-step" data-node-id="${node.id}">+ Add Step</button>
+                        </div>
+                    </div>
+                `}
+            </div>
+        `;
+    }
+
+    // ---- Map view: editable org-chart of connected boxes (CSS connectors) ----
+
+    _renderFlowchartMap(fc) {
+        if (!fc.phases || fc.phases.length === 0) {
+            return '<div class="ft-map-empty">No phases in this flowchart. Click "New Phase" to start.</div>';
+        }
+        const { total, completed } = this._progress(fc.phases);
+        const rootComplete = total > 0 && completed === total;
+        const sequenceNumbers = this._buildNodeSequenceNumbers(fc.phases);
+
+        let html = '<div class="ft-map"><ul>';
+        html += `<li${rootComplete ? ' class="complete"' : ''}>${this._mapNodeBox({
+            title: fc.name, isRoot: true, isContainer: true,
+            complete: rootComplete, count: `${completed}/${total}`
+        })}`;
+        html += '<ul>' + fc.phases.map(n => this._renderMapNode(n, 0, sequenceNumbers)).join('') + '</ul>';
+        html += '</li></ul></div>';
+        return html;
+    }
+
+    _renderMapNode(node, depth, sequenceNumbers) {
+        const isContainer = this._isContainer(node);
+        const complete = this._isComplete(node);
+        const hasChildren = isContainer && node.children.length > 0;
+        const collapsed = hasChildren && this.state.collapsedNodes.has(node.id);
+        let count = '';
+        if (isContainer) {
+            const p = this._progress(node.children);
+            count = `${p.completed}/${p.total}`;
+        }
+        const sequence = sequenceNumbers.get(node.id);
+        const typeName = sequence ? sequence.label : this._nodeTypeName(depth, isContainer);
+        const displayTitle = this._displayNodeTitle(node.title, typeName);
+
+        // `complete` on the <li> lets CSS paint this node's connector lines green.
+        const liClasses = [complete ? 'complete' : '', collapsed ? 'collapsed' : ''].filter(Boolean).join(' ');
+        let html = `<li${liClasses ? ` class="${liClasses}"` : ''}>${this._mapNodeBox({
+            nodeId: node.id, title: displayTitle, typeName, isContainer,
+            complete, count, hasChildren, collapsed
+        })}`;
+        if (hasChildren && !collapsed) {
+            html += '<ul>' + node.children.map(c => this._renderMapNode(c, depth + 1, sequenceNumbers)).join('') + '</ul>';
+        }
+        html += '</li>';
+        return html;
+    }
+
+    _mapNodeBox({ nodeId, title, typeName, isRoot, isContainer, complete, count, hasChildren, collapsed }) {
+        const cls = [
+            'ft-map-node',
+            isRoot ? 'root' : '',
+            isContainer ? 'container' : 'leaf',
+            complete ? 'complete' : ''
+        ].filter(Boolean).join(' ');
+        const tag = isRoot ? 'div' : 'button';
+        const action = isContainer ? (hasChildren ? 'toggle-collapse' : '') : 'toggle-leaf';
+        const interactionAttrs = isRoot ? '' : [
+            'type="button"',
+            `data-node-id="${nodeId}"`,
+            action ? `data-map-action="${action}"` : '',
+            !isContainer ? `aria-pressed="${complete ? 'true' : 'false'}"` : '',
+            isContainer && hasChildren ? `aria-expanded="${collapsed ? 'false' : 'true'}"` : '',
+            `title="${isContainer && hasChildren ? 'Click to collapse or expand; right-click for options' : (!isContainer ? 'Click to toggle completion; right-click for options' : 'Right-click for options')}"`
+        ].filter(Boolean).join(' ');
+        return `
+            <${tag} class="${cls}" ${interactionAttrs}>
+                ${typeName ? `<span class="ft-map-type">${typeName}</span>` : ''}
+                ${title ? `<span class="ft-map-title">${this._escapeHtml(title)}</span>` : ''}
+                ${count ? `<span class="ft-map-count">${count}</span>` : ''}
+            </${tag}>
+        `;
     }
 }
 

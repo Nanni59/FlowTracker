@@ -621,6 +621,24 @@ button {
     color: #111;
 }
 
+.map-only-control {
+    display: none;
+}
+
+.map-only-control.visible {
+    display: flex;
+}
+
+.map-only-control:disabled {
+    cursor: default;
+    opacity: 0.35;
+}
+
+.map-only-control:disabled:hover {
+    background: transparent;
+    color: #666;
+}
+
 .danger-icon-btn:hover {
     background: rgba(239, 68, 68, 0.08);
     color: var(--accent-danger);
@@ -1085,9 +1103,18 @@ select.ai-input::-ms-expand,
 
 .phase-col {
     min-width: 320px;
-    max-width: 320px;
+    max-width: 520px;
     display: flex;
     flex-direction: column;
+}
+
+/* Nested outlines need a stable canvas; otherwise the phase column is sized by
+   whichever descendant branches happen to be expanded. */
+.phase-col.has-nesting {
+    width: 400px;
+    min-width: 400px;
+    max-width: 400px;
+    flex: 0 0 400px;
 }
 
 .phase-header {
@@ -1116,6 +1143,27 @@ select.ai-input::-ms-expand,
     transition: 0.2s;
 }
 
+.phase-sequence-label,
+.step-sequence-label {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    align-self: center;
+    width: max-content;
+    color: var(--primary-color);
+    font-size: 0.88rem;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    line-height: 1.2;
+    text-transform: none;
+    background: #eff6ff;
+    border: 1px solid #dbeafe;
+    border-radius: 999px;
+    padding: 2px 8px;
+}
+
+.phase-sequence-label { margin-bottom: 0.3rem; }
+
 /* Phase Complete Styling */
 .phase-col.phase-completed .phase-header {
     border-color: var(--accent-success);
@@ -1123,6 +1171,11 @@ select.ai-input::-ms-expand,
 }
 .phase-col.phase-completed .phase-header h3 {
     color: var(--accent-success);
+}
+.phase-col.phase-completed .phase-sequence-label {
+    color: var(--accent-success);
+    background: #f0fdf4;
+    border-color: #bbf7d0;
 }
 .phase-col.phase-completed .s-path {
     stroke: var(--accent-success);
@@ -1269,14 +1322,17 @@ select.ai-input::-ms-expand,
 
 .step-card {
     width: 100%;
+    min-width: 130px; /* keeps deeply-nested cards readable; column grows + canvas scrolls */
     background: white;
     border: 1px solid #e2e8f0;
     border-radius: 12px; /* Rounded rectangle */
     padding: 1.1rem 1.5rem;
     box-sizing: border-box;
     display: flex;
+    flex-direction: column;
     align-items: center;
     justify-content: center;
+    gap: 0.25rem;
     min-height: 64px;
     box-shadow: 0 1px 4px rgba(15, 23, 42, 0.04);
     transition: border-color 0.2s, background-color 0.2s;
@@ -1307,6 +1363,12 @@ select.ai-input::-ms-expand,
 .step-row.checked .step-title {
     color: var(--accent-success);
     text-decoration: line-through;
+}
+
+.step-row.checked .step-sequence-label {
+    color: var(--accent-success);
+    background: #f0fdf4;
+    border-color: #bbf7d0;
 }
 
 .step-row.checked.next-checked .arrow-line {
@@ -1340,7 +1402,8 @@ select.ai-input::-ms-expand,
 }
 
 .btn-add-step {
-    width: 276px; /* Width of the step card (320 - 26 - 18) */
+    width: 100%;
+    max-width: 276px;
     background: transparent;
     border: 1.5px dashed #ccc;
     color: #888;
@@ -1568,3 +1631,396 @@ select.ai-input::-ms-expand,
 @keyframes aiSpin {
     to { transform: rotate(360deg); }
 }
+
+/* ===== View-mode toggle (List / Map) ===== */
+.view-mode-toggle {
+    display: inline-flex;
+    background: #f1f5f9;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 2px;
+    gap: 2px;
+}
+
+.vmt-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    border: none;
+    background: transparent;
+    color: #64748b;
+    font-family: inherit;
+    font-size: 0.85rem;
+    font-weight: 600;
+    padding: 5px 10px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s, box-shadow 0.15s;
+}
+
+.vmt-btn:hover { color: var(--primary-color); }
+
+.vmt-btn.active {
+    background: #fff;
+    color: var(--primary-color);
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.1);
+}
+
+.vmt-btn svg { display: block; }
+
+/* ===== Nested list: sub-phases / groups within a phase column ===== */
+.node-list {
+    display: flex;
+    flex-direction: column;
+}
+
+.subphase {
+    border: 0;
+    background: transparent;
+    margin-bottom: 0.65rem;
+    /* Align the group box with sibling leaf cards; sibling check-circles sit in
+       the 44px gutter to the left, forming a continuous rail. */
+    margin-left: 44px;
+}
+
+.subphase-header {
+    display: flex;
+    position: relative;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    min-height: 60px;
+    box-sizing: border-box;
+    padding: 0.5rem 3.25rem;
+    background: #fff;
+    border: 1px solid #dbe4f0;
+    border-radius: 10px;
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+    cursor: pointer;
+    user-select: none;
+    transition: background 0.15s, border-color 0.15s, box-shadow 0.15s;
+}
+
+.subphase-header:hover {
+    background: #f8fafc;
+    border-color: #bfdbfe;
+    box-shadow: 0 3px 8px rgba(37, 99, 235, 0.08);
+}
+
+.subphase-caret {
+    display: inline-flex;
+    position: absolute;
+    left: 0.65rem;
+    top: 50%;
+    transform: translateY(-50%);
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    color: #64748b;
+    background: #f1f5f9;
+    border-radius: 7px;
+    flex-shrink: 0;
+}
+
+.node-type-chip {
+    font-size: 0.8rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: none;
+    color: var(--primary-color);
+    background: #eff6ff;
+    border: 1px solid #dbeafe;
+    border-radius: 999px;
+    padding: 2px 7px;
+    flex-shrink: 0;
+}
+
+.subphase-title {
+    flex: none;
+    width: 100%;
+    min-width: 0;
+    font-weight: 600;
+    color: #334155;
+    font-size: 0.98rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    text-align: center;
+}
+
+.subphase-count {
+    position: absolute;
+    right: 0.65rem;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: #64748b;
+    background: #f8fafc;
+    border-radius: 999px;
+    padding: 2px 7px;
+    flex-shrink: 0;
+}
+
+.node-children {
+    padding: 0.55rem 0 0.1rem 0.75rem;
+    border-left: 2px solid #dbe4f0;
+    margin-left: 12px;
+}
+
+/* Nested levels use a tighter rail than the top-level phase flow so 3–4 levels
+   of nesting stay readable. Group boxes stay aligned with sibling leaf cards. */
+.node-children .step-status { margin-right: 8px; }
+.node-children .subphase { margin-left: 34px; }
+.node-children .step-card {
+    min-width: 120px;
+    min-height: 54px;
+    padding: 0.7rem 0.85rem;
+    border-radius: 10px;
+    box-shadow: none;
+}
+.node-children .step-title { font-size: 0.94rem; }
+.node-children .step-sequence-label { font-size: 0.78rem; }
+
+/* Keep add actions available at every nesting level without letting repeated
+   full-width dashed pills dominate the hierarchy. */
+.subphase > .node-children > .add-step-wrapper {
+    justify-content: flex-start;
+    margin: 0.35rem 0 0.15rem 34px;
+}
+.subphase > .node-children > .add-step-wrapper .btn-add-step {
+    width: auto;
+    max-width: none;
+    padding: 0.38rem 0.65rem;
+    color: #64748b;
+    background: #f8fafc;
+    border: 0;
+    border-radius: 8px;
+    font-size: 0.76rem;
+}
+.subphase > .node-children > .add-step-wrapper .btn-add-step:hover {
+    color: var(--primary-color);
+    background: #eff6ff;
+}
+
+/* Completed container styling — mirrors the green phase-complete accent */
+.subphase.complete {
+    background: transparent;
+}
+.subphase.complete > .subphase-header {
+    border-color: var(--accent-success);
+    background: #fff;
+}
+.subphase.complete > .subphase-header .subphase-caret {
+    color: var(--accent-success);
+    background: #f0fdf4;
+}
+.subphase.complete > .subphase-header .node-type-chip {
+    color: var(--accent-success);
+    background: #f0fdf4;
+    border-color: #bbf7d0;
+}
+.subphase.complete > .subphase-header .subphase-title { color: var(--accent-success); }
+.subphase.complete > .subphase-header .subphase-count {
+    color: var(--accent-success);
+    background: transparent;
+}
+.subphase.complete > .node-children { border-left-color: var(--accent-success); }
+
+/* ===== Map view: editable org-chart of connected boxes ===== */
+.ft-map {
+    --ft-map-connector-width: 2px;
+    --ft-map-connector-color: #cbd5e1;
+    flex: 1 0 auto;
+    padding: 2.5rem 2rem 3rem;
+    overflow-x: auto;
+    min-height: 0;
+    box-sizing: border-box;
+}
+
+.ft-map-empty {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 40vh;
+    color: var(--text-secondary);
+    font-style: italic;
+    font-size: 1.15rem;
+}
+
+/* Classic pure-CSS org-chart connectors via pseudo-elements. */
+.ft-map ul {
+    display: flex;
+    justify-content: center;
+    /* Reset the browser's default ul inline padding. Leaving it in place shifts
+       every nested child row to the right, breaking single-child connectors. */
+    padding: 20px 0 0;
+    position: relative;
+    list-style: none;
+    margin: 0;
+}
+
+/* Size the root row to its content and center it with auto margins. When the
+   tree is narrower than the frame it centers; when it's wider the auto margins
+   collapse to 0 so it left-aligns and scrolls from its true left edge (instead
+   of being centred, which stranded the left half off-screen with a dead gap). */
+.ft-map > ul { padding-top: 0; width: fit-content; margin: 0 auto; }
+
+.ft-map li {
+    position: relative;
+    padding: 20px 7px 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    list-style: none;
+}
+
+/* Horizontal sibling bar (::before = left half, ::after = right half) plus a
+   vertical drop to each box on ::after's border-left — so EVERY child keeps its
+   drop, including the first and last. */
+.ft-map li::before,
+.ft-map li::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    width: 50%;
+    height: 20px;
+    box-sizing: border-box;
+    border-top: var(--ft-map-connector-width) solid var(--ft-map-connector-color);
+}
+.ft-map li::before { right: 50%; }
+.ft-map li::after  {
+    left: 50%;
+    border-left: var(--ft-map-connector-width) solid var(--ft-map-connector-color);
+}
+
+/* The chart root has no parent, so it must not render an incoming stem. */
+.ft-map > ul > li { padding-top: 0; }
+.ft-map > ul > li::before,
+.ft-map > ul > li::after { display: none; }
+
+/* Trim the outward half of the bar at the ends, but keep each box's drop line */
+.ft-map li:first-child::before { border-top: 0; }
+.ft-map li:last-child::after   { border-top: 0; }
+
+/* Only child: no horizontal bar, just a straight vertical drop to the box */
+.ft-map li:only-child::before { display: none; }
+.ft-map li:only-child::after  { left: 50%; width: 0; border-top: 0; }
+
+/* Drop line from a parent down toward its children row */
+.ft-map ul ul::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 50%;
+    width: 0;
+    height: 20px;
+    box-sizing: border-box;
+    border-left: var(--ft-map-connector-width) solid var(--ft-map-connector-color);
+}
+
+/* The horizontal rail is shared by siblings, so it must stay neutral. Painting
+   either half from a child's completion state creates misleading split-colour
+   runs whenever completed and incomplete siblings are mixed. Only the direct
+   drop into a completed node is green. */
+.ft-map li.complete::after { border-left-color: var(--accent-success); }
+.ft-map li.complete > ul::before { border-left-color: var(--accent-success); }
+
+/* A complete container means its whole descendant branch is complete. Paint
+   that container's shared child rail and every direct child drop as one green
+   connector, instead of leaving gray spans between completed children. */
+.ft-map li.complete > ul > li::before,
+.ft-map li.complete > ul > li::after { border-top-color: var(--accent-success); }
+.ft-map li.complete > ul > li::after { border-left-color: var(--accent-success); }
+
+.ft-map-node {
+    position: relative;
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    /* Resolve the card from its own content, not the width contributed by its
+       descendant subtree. This keeps dimensions unchanged when collapsed. */
+    width: max-content;
+    min-width: 104px;
+    max-width: 188px;
+    padding: 0.5rem 0.8rem;
+    box-sizing: border-box;
+    flex: 0 0 auto;
+    background: #fff;
+    border: 1.5px solid #e2e8f0;
+    border-radius: 11px;
+    box-shadow: 0 2px 8px rgba(15, 23, 42, 0.05);
+    color: inherit;
+    font: inherit;
+    text-align: center;
+    transition: box-shadow 0.15s, transform 0.15s, border-color 0.15s;
+}
+
+button.ft-map-node { cursor: pointer; }
+
+button.ft-map-node:focus-visible {
+    outline: 3px solid rgba(37, 99, 235, 0.24);
+    outline-offset: 3px;
+}
+
+.ft-map-node:hover {
+    box-shadow: 0 6px 16px rgba(15, 23, 42, 0.12);
+    transform: translateY(-1px);
+}
+
+.ft-map li.collapsed > .ft-map-node.container {
+    border-style: dashed;
+}
+
+.ft-map-node.root {
+    border-color: var(--primary-color);
+    background: #eff6ff;
+}
+
+.ft-map-node.container { border-color: #c7d2fe; }
+
+.ft-map-node.complete {
+    border-color: var(--accent-success);
+    background: #f0fdf4;
+}
+
+.ft-map-type {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    line-height: 1.2;
+    text-transform: none;
+    color: var(--primary-color);
+    background: #eff6ff;
+    border: 1px solid #dbeafe;
+    border-radius: 999px;
+    padding: 2px 7px;
+}
+.ft-map-node.complete .ft-map-type {
+    color: var(--accent-success);
+    background: #f0fdf4;
+    border-color: #bbf7d0;
+}
+
+.ft-map-title {
+    font-size: 0.92rem;
+    font-weight: 600;
+    color: #334155;
+    line-height: 1.25;
+    word-break: break-word;
+}
+.ft-map-node.complete .ft-map-title { color: var(--accent-success); }
+.ft-map-node.leaf:not(.complete) .ft-map-title { font-weight: 500; }
+
+.ft-map-count {
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: #94a3b8;
+}
+.ft-map-node.complete .ft-map-count { color: var(--accent-success); }
