@@ -1470,7 +1470,17 @@ class App {
     }
 
     _getGeminiModel() {
-        return localStorage.getItem('flowtracker_gemini_model') || 'gemini-2.5-flash';
+        const stored = localStorage.getItem('flowtracker_gemini_model');
+        // A model saved before the list changed may no longer be offered; use the default then.
+        const offered = Array.from(this.els.aiModelSelect?.options || []).some(o => o.value === stored);
+        return stored && offered ? stored : 'gemini-3.8-flash';
+    }
+
+    // Free models in the select's order (best first); each has its own quota, so they form the fallback chain.
+    _getFreeGeminiModels() {
+        return Array.from(this.els.aiModelSelect?.options || [])
+            .filter(o => 'free' in o.dataset)
+            .map(o => o.value);
     }
 
     _setGeminiModel(model) {
@@ -1661,7 +1671,6 @@ class App {
 
     async generateFlowchartFromAI({ text, files, key }) {
         const MODEL = this._getGeminiModel();
-        const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${encodeURIComponent(key)}`;
 
         // Split text/markdown files (read as text into the prompt) from binary files (PDF/images sent inline)
         const textFiles = [];
@@ -1678,20 +1687,28 @@ class App {
             dataSection += `--- File: ${tf.name} ---\n${content}\n\n`;
         }
 
-        const promptText = `You are an expert project manager and system architect. Analyze the provided project overview, notes, Markdown/text files, PDF text, and/or images (which may contain messy handwriting) and convert them into a highly structured, sequential workflow.
-
-Break the work into logical "Phases". Each Phase contains actionable "Steps".
+        const promptText = `You are organizing the provided project overview, notes, Markdown/text files, PDF text, and/or images (which may contain messy handwriting) into a sequential workflow of "Phases", each containing checkable "Steps".
 
 Nesting is OPTIONAL. Only when the material is genuinely hierarchical, a Step may itself contain
 sub-steps (put them in that item's "children"). Keep the tree shallow — do not nest just for the
 sake of it. A simple project should stay a flat Phase → Step structure.
 
-Rules:
-1. Phase titles should be clear (e.g. "Phase 1: Planning").
-2. Keep item titles concise, clear, and actionable (ideally 3-7 words).
-3. Order phases and steps in the sequence the work should be performed.
-4. A leaf item (no children) is a checkable step. An item with "children" is a group/heading.
-5. Output only the structured data — no commentary.
+PRESERVE THE AUTHOR'S WORDING. This is the most important rule:
+- Use the author's own words for every item. Transcribe text from images and handwriting exactly as written.
+- Correct ONLY spelling, grammar, capitalization, and punctuation mistakes. Leave everything else as is.
+- Do NOT paraphrase, summarize, shorten, lengthen, reword, or "improve" text, and do not swap words for synonyms.
+- If a sentence is already correct, keep it word for word. If it has minor errors, fix only those errors.
+- Rewrite a sentence only when it is so grammatically broken that its meaning is unclear, and even then
+  change as few words as possible and keep the intended message.
+- Do not invent steps or add detail that is not in the source. Do not drop content from the source.
+- If the source already has headings or sections, use them as the Phase titles (with only the same grammar
+  fixes). Only when the source has no heading for a group may you write a short, plain Phase title.
+
+Other rules:
+1. Order phases and steps in the sequence the work should be performed (keep the source's order when it gives one).
+2. A leaf item (no children) is a checkable step. An item with "children" is a group/heading.
+3. Output only JSON — no commentary — as an array of phases shaped like:
+   [{"title": "...", "children": [{"title": "..."}, {"title": "...", "children": [{"title": "..."}]}]}]
 
 ${dataSection.trim() ? 'Here is the project data:\n' + dataSection : 'Use the attached file(s) as the project data.'}`;
 
@@ -1726,55 +1743,73 @@ ${dataSection.trim() ? 'Here is the project data:\n' + dataSection : 'Use the at
             required: ['title', 'children']
         };
 
-        const body = {
-            contents: [{ parts }],
-            generationConfig: {
-                responseMimeType: 'application/json',
-                responseSchema: { type: 'ARRAY', items: phaseItems }
-            }
-        };
+        const responseSchema = { type: 'ARRAY', items: phaseItems };
+        const isGemma = model => /^gemma-/.test(model);
 
-        let res;
-        try {
-            res = await fetch(endpoint, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(body)
-            });
-        } catch (e) {
-            throw new Error('Network error contacting Google. Check your internet connection.');
-        }
-
-        if (!res.ok) {
-            // Surface Google's actual error message — it's far more specific than the HTTP code
-            let detail = '';
-            try {
-                const errJson = await res.json();
-                detail = errJson?.error?.message || '';
-            } catch (e) { /* body wasn't JSON */ }
-
-            if (res.status === 400 || res.status === 403) {
-                throw new Error('API key rejected (HTTP ' + res.status + '). ' + (detail || 'Double-check the key and that the "Generative Language API" is enabled for its project.'));
-            }
-            if (res.status === 404) {
-                throw new Error('Model not found (HTTP 404). ' + (detail || 'The model name may be unavailable for this key.'));
-            }
-            if (res.status === 429) {
-                throw new Error('Quota/rate limit (HTTP 429). ' + (detail || 'Free tier has per-minute and per-day limits — wait ~60s.'));
-            }
-            throw new Error(`Gemini request failed (HTTP ${res.status}). ${detail}`);
-        }
-
-        const json = await res.json();
-        const raw = json?.candidates?.[0]?.content?.parts?.[0]?.text;
-        if (!raw) throw new Error('The AI returned an empty response. Try again.');
-
+        // Try the chosen model first, then every free model in order: each has its own daily
+        // quota, and a retired model just 404s, so either moves on to the next one.
+        const models = Array.from(new Set([MODEL, ...this._getFreeGeminiModels()]));
         let parsed;
-        try {
-            parsed = JSON.parse(raw);
-        } catch (e) {
-            throw new Error('The AI returned invalid JSON. Try again or simplify the input.');
+        let lastErr;
+        for (let i = 0; i < models.length && parsed === undefined; i++) {
+            const model = models[i];
+            if (i > 0) await new Promise(r => setTimeout(r, 600));
+
+            let res;
+            try {
+                res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
+                    body: JSON.stringify({
+                        contents: [{ parts }],
+                        // Gemma doesn't take a response schema; its JSON is parsed from the text below.
+                        generationConfig: isGemma(model) ? {} : { responseMimeType: 'application/json', responseSchema }
+                    })
+                });
+            } catch (e) {
+                lastErr = new Error('Network error contacting Google. Check your internet connection.');
+                continue;
+            }
+
+            if (!res.ok) {
+                // Surface Google's actual error message — it's far more specific than the HTTP code
+                let detail = '';
+                try {
+                    const errJson = await res.json();
+                    detail = errJson?.error?.message || '';
+                } catch (e) { /* body wasn't JSON */ }
+
+                // Gemma accepts fewer request options (and file types) than Gemini, so a Gemma 400
+                // says nothing about the key: move on to the next model.
+                if (res.status === 400 && isGemma(model)) {
+                    lastErr = new Error(`${model} could not handle this request (HTTP 400). ${detail}`);
+                    continue;
+                }
+                if (res.status === 400 || res.status === 403) {
+                    throw new Error('API key rejected (HTTP ' + res.status + '). ' + (detail || 'Double-check the key and that the "Generative Language API" is enabled for its project.'));
+                }
+                if (res.status === 404) {
+                    lastErr = new Error('Model not found (HTTP 404). ' + (detail || 'The model name may be unavailable for this key.'));
+                } else if (res.status === 429) {
+                    lastErr = new Error('Quota/rate limit reached on every free model (HTTP 429). ' + (detail || 'Free tier has per-minute and per-day limits — wait ~60s.'));
+                } else {
+                    lastErr = new Error(`Gemini request failed (HTTP ${res.status}). ${detail}`);
+                }
+                continue;
+            }
+
+            const json = await res.json();
+            let raw = (json?.candidates?.[0]?.content?.parts?.[0]?.text || '').trim();
+            if (!raw) { lastErr = new Error('The AI returned an empty response. Try again.'); continue; }
+            // Models without a schema sometimes wrap the JSON in ``` fences.
+            raw = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
+            try {
+                parsed = JSON.parse(raw);
+            } catch (e) {
+                lastErr = new Error('The AI returned invalid JSON. Try again or simplify the input.');
+            }
         }
+        if (parsed === undefined) throw lastErr || new Error('Something went wrong while generating.');
 
         // Normalize recursively: assign fresh unique IDs + completed flags (never trust
         // AI ids), accept either `children` or `steps`, to any depth returned.
