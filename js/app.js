@@ -10,6 +10,10 @@ class App {
             viewingFlowchartId: null,
             viewMode: 'list',                 // 'list' | 'map' — how the open flowchart is shown
             collapsedNodes: new Set(),        // in-memory only (never persisted / exported)
+            // Like Apple Reminders: completed items are hidden unless the viewer chooses to show them.
+            // A viewer preference (saved per browser), never part of flowchart data.
+            hideCompleted: localStorage.getItem('flowtracker_hide_completed') !== 'false',
+            pendingHide: new Set(),           // just-checked leaves kept on screen until the hide delay ends
             expandedCategories: new Set(JSON.parse(localStorage.getItem('expandedCategories') || '[]'))
         };
 
@@ -30,6 +34,7 @@ class App {
             btnClearFlowchart: document.getElementById('btn-clear-flowchart'),
             btnToggleView: document.getElementById('btn-toggle-view'),
             btnMapToggleAll: document.getElementById('btn-map-toggle-all'),
+            btnToggleCompleted: document.getElementById('btn-toggle-completed'),
             btnAddPhase: document.getElementById('btn-add-phase'),
             btnPrevFc: document.getElementById('btn-prev-fc'),
             btnNextFc: document.getElementById('btn-next-fc'),
@@ -638,6 +643,16 @@ class App {
             });
         }
 
+        if (this.els.btnToggleCompleted) {
+            this.els.btnToggleCompleted.addEventListener('click', () => {
+                this.state.hideCompleted = !this.state.hideCompleted;
+                localStorage.setItem('flowtracker_hide_completed', String(this.state.hideCompleted));
+                this._cancelPendingHide();
+                const fc = this.library.getFlowchart(this.state.viewingFlowchartId);
+                if (fc) this._renderWithTransition(fc);
+            });
+        }
+
         if (this.els.btnMapToggleAll) {
             this.els.btnMapToggleAll.addEventListener('click', () => {
                 if (this.state.viewMode !== 'map' || !this.state.viewingFlowchartId) return;
@@ -691,6 +706,11 @@ class App {
         if (this.els.viewModalContent) {
             this.els.viewModalContent.addEventListener('click', async (e) => {
                 // Add a step (leaf) into a phase/container
+                if (e.target.closest('.ft-all-done-btn')) {
+                    this.els.btnToggleCompleted?.click();
+                    return;
+                }
+
                 const addBtn = e.target.closest('.btn-add-step');
                 if (addBtn) {
                     await this._addChildLeaf(addBtn.dataset.nodeId);
@@ -814,7 +834,130 @@ class App {
         if (!found || this._isContainer(found.node)) return;
         found.node.completed = !found.node.completed;
         this.library.saveData();
+        if (this.state.hideCompleted) {
+            // Keep a just-checked item visible for a moment so the tick registers, then hide it.
+            // Each check restarts the delay, so quickly ticking several items hides them together.
+            if (found.node.completed) this.state.pendingHide.add(nodeId);
+            else this.state.pendingHide.delete(nodeId);
+            clearTimeout(this._pendingHideTimer);
+            if (this.state.pendingHide.size) {
+                this._pendingHideTimer = setTimeout(() => this._flushPendingHide(), 900);
+            }
+        }
         this.renderFlowchartCanvas(fc);
+    }
+
+    _cancelPendingHide() {
+        clearTimeout(this._pendingHideTimer);
+        this.state.pendingHide.clear();
+    }
+
+    // Hide the items whose delay has ended. Whatever disappears (a step, or a whole
+    // subphase/phase it just completed) fades out while the rest glides into place.
+    _flushPendingHide() {
+        const fc = this.library.getFlowchart(this.state.viewingFlowchartId);
+        this.state.pendingHide.clear();
+        if (!fc) return;
+        this._renderWithTransition(fc);
+    }
+
+    // Re-render the canvas through a View Transition: the browser snapshots every named node
+    // before and after, then morphs between the two layouts in one motion (no height
+    // collapsing, so gaps and connectors never snap). Falls back to a plain re-render.
+    _renderWithTransition(fc) {
+        const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+        if (!document.startViewTransition || reduceMotion || !this.els.viewModal.classList.contains('visible')) {
+            this.renderFlowchartCanvas(fc);
+            return;
+        }
+        this._nameTransitionNodes(true);
+        const transition = document.startViewTransition(() => {
+            this.renderFlowchartCanvas(fc);
+            this._nameTransitionNodes(true);
+        });
+        this._activeTransition = transition;
+        // A transition is skipped (its promises reject) when another starts or the tab is
+        // hidden; the DOM update still happens, so there is nothing to recover.
+        transition.ready.catch(() => {});
+        transition.finished.catch(() => {}).finally(() => {
+            // Only the latest transition clears names; an older one must not strip a newer one's.
+            if (this._activeTransition === transition) this._nameTransitionNodes(false);
+        });
+    }
+
+    // Give each node a unique view-transition-name only for the duration of a transition
+    // (a name makes its element a stacking context, so it isn't left on permanently).
+    _nameTransitionNodes(on) {
+        const root = this.els.viewModalContent;
+        // Snapshots normally escape their scroll containers, so nest them inside groups that
+        // clip them (see ::view-transition-group-children in the CSS): the canvas, and inside it
+        // the view's own sideways scroller, whose right edge cuts off columns/branches past it.
+        root.style.viewTransitionName = on ? 'ft-canvas' : '';
+        // The map's scroller also holds its connector lines, so naming it gives the lines a
+        // layer of their own: old lines clear before new ones draw in, instead of cross-fading.
+        const scroller = root.querySelector('.canvas-columns, .ft-map');
+        const scrollerName = scroller?.classList.contains('ft-map') ? 'ft-map-lines' : 'ft-columns';
+        if (scroller) {
+            scroller.style.viewTransitionName = on ? scrollerName : '';
+            scroller.style.viewTransitionGroup = on ? 'ft-canvas' : '';
+        }
+        const outer = root.getBoundingClientRect();
+        const inner = scroller ? scroller.getBoundingClientRect() : outer;
+        const view = {
+            top: Math.max(outer.top, inner.top), bottom: Math.min(outer.bottom, inner.bottom),
+            left: Math.max(outer.left, inner.left), right: Math.min(outer.right, inner.right)
+        };
+        // Map cards are named rather than their <li> branches: cards keep a fixed size, while a
+        // branch's width changes with its subtree and would make its snapshot scale and ghost.
+        const named = root.querySelectorAll(
+            '.phase-col[data-node-id], .subphase[data-node-id], .step-row[data-node-id], .ft-map-node'
+        );
+        named.forEach(el => {
+            el.style.viewTransitionName = '';
+            el.style.viewTransitionGroup = '';
+            if (!on) return;
+            // Nodes scrolled fully out of view stay in their container's snapshot instead.
+            const r = el.getBoundingClientRect();
+            if (r.bottom <= view.top || r.top >= view.bottom || r.right <= view.left || r.left >= view.right) return;
+            const id = el.dataset.nodeId || (el.classList.contains('root') ? 'root' : '');
+            if (!id) return;
+            el.style.viewTransitionName = `ft-${id.replace(/[^a-zA-Z0-9_-]/g, '_')}`;
+            el.style.viewTransitionGroup = scroller ? scrollerName : 'ft-canvas';
+        });
+    }
+
+    // Nodes to draw: everything, or (when completed items are hidden) only unfinished ones,
+    // plus anything still in its brief "just checked" window.
+    _visibleNodes(nodes) {
+        if (!this.state.hideCompleted) return nodes || [];
+        return (nodes || []).filter(n => !this._isComplete(n) || this._hasPendingHide(n));
+    }
+
+    _hasPendingHide(node) {
+        if (this.state.pendingHide.has(node.id)) return true;
+        return this._isContainer(node) && node.children.some(c => this._hasPendingHide(c));
+    }
+
+    _updateCompletedToggle() {
+        const button = this.els.btnToggleCompleted;
+        if (!button) return;
+        const hidden = this.state.hideCompleted;
+        const label = hidden ? 'Show completed' : 'Hide completed';
+        button.title = label;
+        button.setAttribute('aria-label', label);
+        button.setAttribute('aria-pressed', hidden ? 'false' : 'true');
+        button.classList.toggle('is-active', !hidden);
+        button.innerHTML = hidden ? `
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"></path>
+                <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"></path>
+                <path d="M14.12 14.12a3 3 0 1 1-4.24-4.24"></path>
+                <line x1="1" y1="1" x2="23" y2="23"></line>
+            </svg>` : `
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                <circle cx="12" cy="12" r="3"></circle>
+            </svg>`;
     }
 
     // Push a new leaf into a container (or an empty phase). Turns a leaf into a
@@ -1388,6 +1531,7 @@ class App {
         this.state.viewingFlowchartId = fc.id;
         this.state.viewMode = 'list';
         this.state.collapsedNodes.clear();
+        this._cancelPendingHide();
         this._prevBarPercent = null;
         this.els.viewModalTitle.textContent = fc.name;
         this.els.viewModal.classList.add('visible');
@@ -1878,6 +2022,9 @@ ${dataSection.trim() ? 'Here is the project data:\n' + dataSection : 'Use the at
 
         const isMap = this.state.viewMode === 'map';
         this._updateMapToggleAllButton(fc);
+        this._updateCompletedToggle();
+        const allHidden = this.state.hideCompleted && fc.phases.length > 0
+            && this._visibleNodes(fc.phases).length === 0;
 
         let html = `
             <div class="canvas-header-card">
@@ -1894,7 +2041,20 @@ ${dataSection.trim() ? 'Here is the project data:\n' + dataSection : 'Use the at
             </div>
         `;
 
-        html += isMap ? this._renderFlowchartMap(fc) : this._renderFlowchartColumns(fc);
+        if (allHidden) {
+            html += `
+                <div class="ft-all-done">
+                    <div class="ft-all-done-icon" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6.5 9 17.5 4 12.5"></polyline></svg>
+                    </div>
+                    <h3 class="ft-all-done-title">All steps complete</h3>
+                    <p class="ft-all-done-text">Completed steps are hidden.</p>
+                    <button type="button" class="ft-all-done-btn">Show completed</button>
+                </div>
+            `;
+        } else {
+            html += isMap ? this._renderFlowchartMap(fc) : this._renderFlowchartColumns(fc);
+        }
 
         canvas.innerHTML = html;
         this.els.viewModalContent.appendChild(canvas);
@@ -1966,10 +2126,14 @@ ${dataSection.trim() ? 'Here is the project data:\n' + dataSection : 'Use the at
 
         const sequenceNumbers = this._buildNodeSequenceNumbers(fc.phases);
 
-        fc.phases.forEach((phase, phaseIndex) => {
+        const phases = this._visibleNodes(fc.phases);
+        phases.forEach((phase, phaseIndex) => {
             const phaseCompleteClass = this._isComplete(phase) ? 'phase-completed' : '';
-            const hasChildren = Array.isArray(phase.children) && phase.children.length > 0;
-            const hasNesting = hasChildren && phase.children.some(node => this._isContainer(node));
+            const children = this._visibleNodes(phase.children);
+            const hasChildren = children.length > 0;
+            // Judged on all children, hidden ones included, so a column keeps its width
+            // (and hide/show animations don't resize it) as completed items come and go.
+            const hasNesting = hasChildren && (phase.children || []).some(node => this._isContainer(node));
             const phaseSequence = sequenceNumbers.get(phase.id);
             const phaseLabel = phaseSequence ? phaseSequence.label : `Phase ${phaseIndex + 1}`;
             const phaseTitle = this._displayNodeTitle(phase.title, phaseLabel);
@@ -1979,7 +2143,7 @@ ${dataSection.trim() ? 'Here is the project data:\n' + dataSection : 'Use the at
                     <div class="phase-header" title="Right-click for phase options">
                         <span class="phase-sequence-label">${phaseLabel}</span>
                         ${phaseTitle ? `<h3>${this._escapeHtml(phaseTitle)}</h3>` : ''}
-                        ${phaseIndex < fc.phases.length - 1 ? `
+                        ${phaseIndex < phases.length - 1 ? `
                             <div class="phase-connector ${phaseCompleteClass}">
                                 <svg width="48" height="20" viewBox="0 0 48 20" preserveAspectRatio="none">
                                     <line class="phase-arrow-line" x1="0" y1="10" x2="38" y2="10" stroke="var(--primary-color)" stroke-width="2" stroke-linecap="butt"/>
@@ -2000,7 +2164,7 @@ ${dataSection.trim() ? 'Here is the project data:\n' + dataSection : 'Use the at
                         </svg>
                     </div>
                     <div class="node-list">
-                        ${this._renderNodes(phase.children, 1, sequenceNumbers)}
+                        ${this._renderNodes(children, 1, sequenceNumbers)}
                     </div>
                 `;
             }
@@ -2019,6 +2183,7 @@ ${dataSection.trim() ? 'Here is the project data:\n' + dataSection : 'Use the at
     }
 
     // Render a sibling list of nodes at a given depth (leaves + containers mixed).
+    // `nodes` is the already-filtered sibling list, so connectors chain to the next *visible* sibling.
     _renderNodes(nodes, depth, sequenceNumbers) {
         return (nodes || []).map((node, index) =>
             this._isContainer(node)
@@ -2086,7 +2251,7 @@ ${dataSection.trim() ? 'Here is the project data:\n' + dataSection : 'Use the at
                 </div>
                 ${collapsed ? '' : `
                     <div class="node-children">
-                        ${this._renderNodes(node.children, depth + 1, sequenceNumbers)}
+                        ${this._renderNodes(this._visibleNodes(node.children), depth + 1, sequenceNumbers)}
                         <div class="add-step-wrapper">
                             <button class="btn-add-step" data-node-id="${node.id}">+ Add Step</button>
                         </div>
@@ -2111,7 +2276,7 @@ ${dataSection.trim() ? 'Here is the project data:\n' + dataSection : 'Use the at
             title: fc.name, isRoot: true, isContainer: true,
             complete: rootComplete, count: `${completed}/${total}`
         })}`;
-        html += '<ul>' + fc.phases.map(n => this._renderMapNode(n, 0, sequenceNumbers)).join('') + '</ul>';
+        html += '<ul>' + this._visibleNodes(fc.phases).map(n => this._renderMapNode(n, 0, sequenceNumbers)).join('') + '</ul>';
         html += '</li></ul></div>';
         return html;
     }
@@ -2119,7 +2284,8 @@ ${dataSection.trim() ? 'Here is the project data:\n' + dataSection : 'Use the at
     _renderMapNode(node, depth, sequenceNumbers) {
         const isContainer = this._isContainer(node);
         const complete = this._isComplete(node);
-        const hasChildren = isContainer && node.children.length > 0;
+        const children = isContainer ? this._visibleNodes(node.children) : [];
+        const hasChildren = children.length > 0;
         const collapsed = hasChildren && this.state.collapsedNodes.has(node.id);
         let count = '';
         if (isContainer) {
@@ -2137,7 +2303,7 @@ ${dataSection.trim() ? 'Here is the project data:\n' + dataSection : 'Use the at
             complete, count, hasChildren, collapsed
         })}`;
         if (hasChildren && !collapsed) {
-            html += '<ul>' + node.children.map(c => this._renderMapNode(c, depth + 1, sequenceNumbers)).join('') + '</ul>';
+            html += '<ul>' + children.map(c => this._renderMapNode(c, depth + 1, sequenceNumbers)).join('') + '</ul>';
         }
         html += '</li>';
         return html;

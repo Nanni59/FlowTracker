@@ -639,6 +639,16 @@ button {
     color: #666;
 }
 
+/* Show/Hide completed toggle: tinted while completed items are shown. */
+#btn-toggle-completed.is-active {
+    color: var(--primary-color);
+}
+
+#btn-toggle-completed.is-active:hover {
+    background: rgba(37, 99, 235, 0.08);
+    color: var(--primary-color);
+}
+
 .danger-icon-btn:hover {
     background: rgba(239, 68, 68, 0.08);
     color: var(--accent-danger);
@@ -2024,3 +2034,122 @@ button.ft-map-node:focus-visible {
     color: #94a3b8;
 }
 .ft-map-node.complete .ft-map-count { color: var(--accent-success); }
+
+/* ===== Hide completed (Apple Reminders style) ===== */
+/* Hiding/showing runs as a View Transition (see _renderWithTransition): nodes that stay
+   glide to their new place, nodes that leave fade and settle, nodes that arrive fade in. */
+::view-transition-group(*) {
+    animation-duration: 0.42s;
+    animation-timing-function: cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+/* Keep nodes inside their scroll areas while they move (nested groups): the canvas, and
+   the view's sideways scroller, which cuts off the column/branch at its right edge. */
+::view-transition-group-children(ft-canvas),
+::view-transition-group-children(ft-columns),
+::view-transition-group-children(ft-map-lines) {
+    overflow: clip;
+}
+
+::view-transition-old(*),
+::view-transition-new(*) {
+    animation-duration: 0.3s;
+    animation-timing-function: ease;
+}
+
+::view-transition-old(*):only-child {
+    animation: ft-vt-leave 0.18s cubic-bezier(0.4, 0, 1, 1) both;
+}
+
+::view-transition-new(*):only-child {
+    animation: ft-vt-enter 0.34s cubic-bezier(0, 0, 0.2, 1) 0.08s both;
+}
+
+/* Map connectors: old lines clear quickly, new lines draw in once the cards have moved. */
+::view-transition-old(ft-map-lines) {
+    animation: ft-vt-fade-out 0.12s ease-out both;
+}
+
+::view-transition-new(ft-map-lines) {
+    animation: ft-vt-fade-in 0.24s ease-out 0.2s both;
+}
+
+@keyframes ft-vt-fade-out {
+    to { opacity: 0; }
+}
+
+@keyframes ft-vt-fade-in {
+    from { opacity: 0; }
+}
+
+@keyframes ft-vt-leave {
+    to { opacity: 0; transform: scale(0.96); }
+}
+
+@keyframes ft-vt-enter {
+    from { opacity: 0; transform: scale(0.97); }
+}
+
+.ft-all-done {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    min-height: 50vh;
+    padding: 0 16px;
+    text-align: center;
+    animation: ft-all-done-in 0.4s cubic-bezier(0, 0, 0.2, 1) both;
+}
+
+.ft-all-done-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 56px;
+    height: 56px;
+    margin-bottom: 10px;
+    border-radius: 50%;
+    background: rgba(21, 128, 61, 0.1);
+    color: var(--accent-success);
+}
+
+.ft-all-done-title {
+    margin: 0;
+    font-size: 1.35rem;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.ft-all-done-text {
+    margin: 0;
+    font-size: 1rem;
+    color: var(--text-secondary);
+}
+
+.ft-all-done-btn {
+    margin-top: 14px;
+    padding: 8px 18px;
+    border: 1px solid rgba(37, 99, 235, 0.25);
+    border-radius: 999px;
+    background: rgba(37, 99, 235, 0.06);
+    color: var(--primary-color);
+    font: inherit;
+    font-size: 0.95rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s, border-color 0.2s;
+}
+
+.ft-all-done-btn:hover {
+    background: rgba(37, 99, 235, 0.12);
+    border-color: rgba(37, 99, 235, 0.4);
+}
+
+@keyframes ft-all-done-in {
+    from { opacity: 0; transform: translateY(6px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .ft-all-done { animation: none; }
+}
