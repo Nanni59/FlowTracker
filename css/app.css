@@ -576,8 +576,8 @@ svg.links path.done { stroke: var(--green-fill); }
 .all-done .done-mark svg { width: 44px; height: 44px; }
 .all-done h2 { margin: 0; font-size: 22px; font-weight: 600; color: var(--ink); }
 .all-done .text-btn { margin-top: 8px; font-size: 15px; color: var(--accent); padding: 8px 12px; border-radius: 8px; }
-.empty-flow > svg { color: var(--muted); }
-.empty-actions { display: flex; gap: 8px; margin-top: 12px; }
+.empty-flow > svg { width: 44px; height: 44px; color: var(--muted); }
+.empty-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-top: 12px; }
 .empty-actions svg { width: 16px; height: 16px; }
 .all-done .text-btn:hover { background: var(--side-hover); }
 
