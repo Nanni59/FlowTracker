@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FlowTracker</title>
+
+    <link rel="icon" type="image/svg+xml" href="img/logo/flowtracker-flat-light.svg" data-favicon>
+
+    <!-- Fonts: the system font first (SF Pro on Apple devices); Inter elsewhere -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/app.css?v=nested-46">
+</head>
+
+<body>
+    <!-- Shell: floating glass sidebar + main area -->
+    <section class="shell" id="app">
+        <aside class="side glass" id="sidebar" aria-label="Library"></aside>
+        <div class="side-scrim" data-side-scrim></div>
+        <main class="main" data-view="grid">
+            <div class="grid-view">
+                <div class="toolbar">
+                    <button class="glass-btn lg" data-toggle-side title="Toggle sidebar" aria-label="Toggle sidebar" data-icon="side"></button>
+                    <div class="spacer"></div>
+                    <div class="glass-group lg">
+                        <button class="icon-btn" title="Import" aria-label="Import" data-icon="import" data-sheet="import"></button>
+                        <button class="icon-btn" title="Export" aria-label="Export" data-icon="export" data-export></button>
+                    </div>
+                    <button class="btn-primary lg" data-icon-lead="plus" data-sheet="flowchart">New Flowchart</button>
+                </div>
+                <header class="head"><h1 data-title></h1><p data-sub></p></header>
+                <div class="scroll"><div class="grid" id="main-content" data-grid></div></div>
+            </div>
+            <div class="flow">
+                <div class="toolbar">
+                    <button class="glass-btn lg" data-back title="All flowcharts" aria-label="Back to all flowcharts" data-icon="back"></button>
+                    <div class="spacer"></div>
+                    <div class="seg-glass glass-group lg" role="group" aria-label="View mode">
+                        <span class="seg-thumb instant" aria-hidden="true"></span>
+                        <button data-mode="list" title="List view" data-icon-lead="list"><span class="seg-label">List</span></button>
+                        <button data-mode="map" title="Map view" data-icon-lead="map"><span class="seg-label">Map</span></button>
+                    </div>
+                    <div class="glass-group lg">
+                        <button class="icon-btn" data-eye title="Show completed" aria-label="Show completed" aria-pressed="false"></button>
+                        <button class="icon-btn" data-collapse-all title="Collapse all branches (Map view only)" aria-label="Collapse all branches (Map view only)" data-icon="collapseAll"></button>
+                    </div>
+                    <button class="glass-btn lg phone-only" data-more data-menu-btn title="More actions" aria-label="More actions" aria-haspopup="menu" data-icon="more"></button>
+                    <div class="glass-group lg desk-only">
+                        <button class="icon-btn" data-flow-action="ai" title="Generate with AI" aria-label="Generate with AI" data-icon="sparkle"></button>
+                        <button class="icon-btn" data-flow-action="phase" title="New phase" aria-label="New phase" data-icon="addPhase"></button>
+                        <button class="icon-btn" data-flow-action="json" title="Edit JSON" aria-label="Edit JSON" data-icon="edit"></button>
+                        <button class="icon-btn danger" data-flow-action="clear" title="Clear flowchart" aria-label="Clear flowchart" data-icon="trash"></button>
+                    </div>
+                </div>
+                <header class="flow-head"><div><h1 data-flow-title></h1><p data-flow-sub></p></div><div data-flow-ring></div></header>
+                <div class="flow-body" data-flow-body></div>
+                <div class="pager glass-group lg" role="group" aria-label="Switch flowchart">
+                    <button class="icon-btn" data-step="-1" title="Previous flowchart (←)" aria-label="Previous flowchart" data-icon="prev"></button>
+                    <span class="count" data-pager-count></span>
+                    <button class="icon-btn" data-step="1" title="Next flowchart (→)" aria-label="Next flowchart" data-icon="next"></button>
+                </div>
+            </div>
+        </main>
+    </section>
+
+    <!-- Dialogs: every sheet shares one scrim and one sheet base -->
+    <div class="scrim" data-scrim>
+        <form class="sheet" data-sheet-id="category" role="dialog" aria-modal="true" aria-labelledby="sh-cat">
+            <header class="sheet-head"><h2 id="sh-cat">New Category</h2><button type="button" class="icon-btn close-btn lg" data-close aria-label="Close" data-icon="x"></button></header>
+            <div class="sheet-body">
+                <label class="field"><span>Name</span><input class="input" name="name" placeholder="e.g. Side Projects" autocomplete="off" required></label>
+                <div class="field"><span class="field-label">Colour</span><div class="swatches" role="radiogroup" aria-label="Colour" data-swatches></div></div>
+                <div class="preview-row" data-cat-preview style="--c:#2563eb"><span class="dot"></span><span data-cat-name>New Category</span><span class="muted" data-cat-count>0</span></div>
+            </div>
+            <footer class="sheet-foot"><button type="button" class="btn-secondary lg" data-close>Cancel</button><button class="btn-primary lg" data-submit>Create</button></footer>
+        </form>
+
+        <form class="sheet" data-sheet-id="flowchart" role="dialog" aria-modal="true" aria-labelledby="sh-fc">
+            <header class="sheet-head"><h2 id="sh-fc">New Flowchart</h2><button type="button" class="icon-btn close-btn lg" data-close aria-label="Close" data-icon="x"></button></header>
+            <div class="sheet-body">
+                <label class="field"><span>Name</span><input class="input" name="name" placeholder="e.g. Product Launch" autocomplete="off" required></label>
+                <div class="field"><span class="field-label">Category</span><div class="chips" role="radiogroup" aria-label="Category" data-cat-chips></div></div>
+                <p class="hint">Starts empty. Add phases yourself, generate them with AI, or edit its JSON from the flowchart view.</p>
+            </div>
+            <footer class="sheet-foot"><button type="button" class="btn-secondary lg" data-close>Cancel</button><button class="btn-primary lg" data-submit>Create</button></footer>
+        </form>
+
+        <form class="sheet wide" data-sheet-id="import" role="dialog" aria-modal="true" aria-labelledby="sh-imp">
+            <header class="sheet-head"><h2 id="sh-imp">Import JSON</h2><button type="button" class="icon-btn close-btn lg" data-close aria-label="Close" data-icon="x"></button></header>
+            <p class="sheet-sub">Bring in a FlowTracker backup, or paste the phases of one flowchart.</p>
+            <div class="sheet-body">
+                <div class="seg" role="radiogroup" aria-label="Import method">
+                    <button type="button" role="radio" aria-checked="true" data-imp="file">File</button><button type="button" role="radio" aria-checked="false" data-imp="paste">Paste</button>
+                </div>
+                <div data-imp-pane="file">
+                    <button type="button" class="drop" data-drop="import"><span data-icon="import"></span><span>Drop a .json file here, or <b>browse</b></span></button>
+                    <input type="file" id="file-import" accept=".json,application/json" hidden>
+                </div>
+                <div data-imp-pane="paste" hidden><textarea class="textarea code" style="min-height:200px" spellcheck="false" aria-label="JSON to import" data-imp-text placeholder='[ { "title": "Plan", "children": [ { "title": "Define goals", "completed": false } ] } ]'></textarea></div>
+                <div class="preview-row" data-imp-result hidden style="--c:var(--green-fill)"><span class="dot"></span><span data-imp-name></span><span class="muted" data-imp-count></span></div>
+                <p class="hint" data-imp-hint hidden></p>
+            </div>
+            <footer class="sheet-foot"><button type="button" class="btn-secondary lg" data-close>Cancel</button><button class="btn-primary lg" data-submit disabled data-imp-go>Import</button></footer>
+        </form>
+
+        <form class="sheet alert" data-sheet-id="confirm" role="alertdialog" aria-modal="true" aria-labelledby="sh-clr" aria-describedby="sh-clr-d">
+            <div class="alert-body"><span class="alert-icon" data-icon="trash"></span>
+                <h2 id="sh-clr" data-confirm-title></h2>
+                <p id="sh-clr-d" data-confirm-msg></p></div>
+            <footer class="sheet-foot"><button type="button" class="btn-secondary lg" data-close>Cancel</button><button class="btn-danger lg" data-submit data-confirm-btn>Delete</button></footer>
+        </form>
+
+        <form class="sheet" data-sheet-id="name" role="dialog" aria-modal="true" aria-labelledby="sh-name">
+            <header class="sheet-head"><h2 id="sh-name" data-name-title>New Phase</h2><button type="button" class="icon-btn close-btn lg" data-close aria-label="Close" data-icon="x"></button></header>
+            <div class="sheet-body">
+                <label class="field"><span data-name-label>Name</span><input class="input" name="name" autocomplete="off" required></label>
+            </div>
+            <footer class="sheet-foot"><button type="button" class="btn-secondary lg" data-close>Cancel</button><button class="btn-primary lg" data-submit data-name-btn>Add</button></footer>
+        </form>
+
+        <form class="sheet" data-sheet-id="move" role="dialog" aria-modal="true" aria-labelledby="sh-move">
+            <header class="sheet-head"><h2 id="sh-move" data-move-title>Move to Category</h2><button type="button" class="icon-btn close-btn lg" data-close aria-label="Close" data-icon="x"></button></header>
+            <p class="sheet-sub" data-move-name></p>
+            <div class="sheet-body"><div class="chips" role="radiogroup" aria-label="Category" data-move-chips></div></div>
+            <footer class="sheet-foot"><button type="button" class="btn-secondary lg" data-close>Cancel</button><button class="btn-primary lg" data-submit data-move-btn>Move</button></footer>
+        </form>
+        <form class="sheet wide" data-sheet-id="ai" role="dialog" aria-modal="true" aria-labelledby="sh-ai" novalidate>
+            <header class="sheet-head"><h2 id="sh-ai">Generate with AI</h2><button type="button" class="icon-btn close-btn lg" data-close aria-label="Close" data-icon="x"></button></header>
+            <p class="sheet-sub">Describe the project or attach notes. Your wording is kept; only spelling and grammar are fixed.</p>
+            <div class="sheet-body">
+                <div class="field"><span class="field-label" id="lbl-key">Gemini API key</span>
+                    <div class="key-row" data-key-saved><span class="ok" data-icon-lead="check"><span data-key-label>API key saved</span></span><button type="button" class="link-btn" data-key-change>Change</button><button type="button" class="link-btn danger" data-key-remove>Remove</button></div>
+                    <div class="key-row edit" data-key-edit hidden><input class="input" type="password" placeholder="Paste your Gemini API key" autocomplete="off" spellcheck="false" aria-labelledby="lbl-key" data-key-input><button type="button" class="btn-primary" data-key-save>Save</button></div>
+                    <p class="hint">Get a free key at <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a>. It stays in this browser. In Google AI Studio you can restrict it to your own site.</p>
+                </div>
+                <div class="field"><span class="field-label" id="lbl-model">Model</span>
+                    <button type="button" class="dd" data-dd aria-haspopup="listbox" aria-controls="dd-pop" aria-expanded="false" aria-labelledby="lbl-model">
+                        <span class="dd-val"><span class="dd-name" data-dd-name></span><span class="dd-note" data-dd-note></span></span><span class="dd-chev" data-icon="chevrons" aria-hidden="true"></span></button>
+                    <span class="hint">If a model is out of quota or unavailable, the other free models are tried in order.</span>
+                </div>
+                <label class="field"><span>Notes</span><textarea class="textarea" rows="4" data-ai-text placeholder="e.g. Launch the new website: plan, design, build and launch, with QA before go-live."></textarea></label>
+                <div class="field"><span class="field-label">Attachments</span>
+                    <button type="button" class="drop" data-drop="ai"><span data-icon="import"></span><span>Drop PDFs, images or text files, or <b>browse</b></span></button>
+                    <input type="file" data-ai-files accept=".pdf,.md,.markdown,.txt,image/*" multiple hidden>
+                    <div class="files" data-files></div>
+                </div>
+                <p class="hint warn" role="alert" data-ai-error hidden></p>
+            </div>
+            <footer class="sheet-foot"><button type="button" class="btn-secondary lg" data-close>Cancel</button><button class="btn-primary lg" data-submit data-ai-run><span data-ai-icon></span><span data-ai-label>Generate</span></button></footer>
+        </form>
+
+        <form class="sheet xwide" data-sheet-id="json" role="dialog" aria-modal="true" aria-labelledby="sh-json">
+            <header class="sheet-head"><h2 id="sh-json">Edit JSON</h2><button type="button" class="icon-btn close-btn lg" data-close aria-label="Close" data-icon="x"></button></header>
+            <p class="sheet-sub">Groups nest with <code>children</code>; a step is <code>{ "title", "completed" }</code>. IDs are added automatically.</p>
+            <div class="sheet-body"><textarea class="textarea code" spellcheck="false" autocomplete="off" data-json aria-label="Flowchart JSON" aria-describedby="json-note"></textarea></div>
+            <footer class="sheet-foot"><span class="note" id="json-note" aria-live="polite" data-json-note></span><button type="button" class="btn-secondary lg" data-close>Cancel</button><button class="btn-primary lg" data-submit data-json-save>Save Changes</button></footer>
+        </form>
+    </div>
+
+    <div class="menu" role="menu" data-menu></div>
+    <div class="dd-pop" id="dd-pop" role="listbox" aria-label="Model" data-dd-pop></div>
+    <div class="toast" role="status" aria-live="polite" data-toast></div>
+
+    <!-- Scripts (Order Matters) -->
+    <script src="js/library.js?v=nested-46"></script>
+    <script src="js/ui.js?v=nested-46"></script>
+    <script src="js/app.js?v=nested-46"></script>
+</body>
+
+</html>

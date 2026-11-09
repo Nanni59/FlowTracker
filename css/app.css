@@ -1,0 +1,671 @@
+/* FlowTracker redesign: Apple liquid glass (approved mockup: .app-check/inspiration/landing-concepts.html).
+   Colours are tokens on :root, overridden for dark by prefers-color-scheme and by [data-theme].
+   No drop-shadow depth and no background gradients (radial-gradients below are only the cursor glint/rim light). */
+:root {
+  --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", "Segoe UI", system-ui, sans-serif;
+  --bg: #f5f5f7; --surface: #ffffff; --ink: #1d1d1f; --muted: #6e6e73;
+  --accent: #2563eb; --accent-ink: #fff; --green: #248a3d; --green-fill: #34c759;
+  /* Fills behind white text keep the brand blue in both themes (5.2:1); red is the accessible system red (5.4:1) */
+  --accent-fill: #2563eb; --accent-fill-hover: #1d4ed8; --danger: #d70015; --danger-fill: #d70015; --danger-fill-hover: #b80012;
+  --sep: rgba(0,0,0,.08); --field: rgba(118,118,128,.06); --fill: rgba(118,118,128,.12); --fill-strong: rgba(118,118,128,.2);
+  --glass: rgba(255,255,255,.72); --glass-edge: rgba(255,255,255,.9); --glass-hi: rgba(255,255,255,.95);
+  --glint: rgba(255,255,255,.6); --rim: rgba(0,0,0,.16);
+  --btn-glass: rgba(255,255,255,.75); --btn-glass-hover: rgba(236,236,240,.88); --btn-item-hover: rgba(120,120,128,.14);
+  --btn-edge: rgba(0,0,0,.08); --btn-shadow: rgba(0,0,0,.05);
+  --side-hover: rgba(120,120,128,.08); --side-active: rgba(120,120,128,.16);
+  --line: rgba(0,0,0,.14); --check-ring: rgba(60,60,67,.35); --link: #d1d1d6;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #000; --surface: #1c1c1e; --ink: #f5f5f7; --muted: #a1a1a6;
+    --accent: #2997ff; --green: #30d158; --green-fill: #30d158; --danger: #ff453a;
+    --sep: rgba(255,255,255,.1); --field: rgba(118,118,128,.12); --fill: rgba(118,118,128,.24); --fill-strong: rgba(118,118,128,.34);
+    --glass: rgba(44,44,48,.55); --glass-edge: rgba(255,255,255,.1); --glass-hi: rgba(255,255,255,.14);
+    --glint: rgba(255,255,255,.08); --rim: rgba(255,255,255,.45);
+    --btn-glass: rgba(44,44,48,.6); --btn-glass-hover: rgba(64,64,70,.72); --btn-item-hover: rgba(255,255,255,.12);
+    --btn-edge: rgba(255,255,255,.12); --btn-shadow: rgba(0,0,0,.3);
+    --side-hover: rgba(255,255,255,.07); --side-active: rgba(255,255,255,.14);
+    --line: rgba(255,255,255,.2); --check-ring: rgba(235,235,245,.4); --link: #48484a;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #000; --surface: #1c1c1e; --ink: #f5f5f7; --muted: #a1a1a6;
+  --accent: #2997ff; --green: #30d158; --green-fill: #30d158; --danger: #ff453a;
+  --sep: rgba(255,255,255,.1); --field: rgba(118,118,128,.12); --fill: rgba(118,118,128,.24); --fill-strong: rgba(118,118,128,.34);
+  --glass: rgba(44,44,48,.55); --glass-edge: rgba(255,255,255,.1); --glass-hi: rgba(255,255,255,.14);
+  --glint: rgba(255,255,255,.08); --rim: rgba(255,255,255,.45);
+  --btn-glass: rgba(44,44,48,.6); --btn-glass-hover: rgba(64,64,70,.72); --btn-item-hover: rgba(255,255,255,.12);
+  --btn-edge: rgba(255,255,255,.12); --btn-shadow: rgba(0,0,0,.3);
+  --side-hover: rgba(255,255,255,.07); --side-active: rgba(255,255,255,.14);
+  --line: rgba(255,255,255,.2); --check-ring: rgba(235,235,245,.4); --link: #48484a;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0; overflow: hidden; background: var(--bg); color: var(--ink);
+  font: 400 17px/1.47 var(--font); -webkit-font-smoothing: antialiased;
+}
+button, input { font: inherit; color: inherit; }
+button { cursor: pointer; border: 0; background: none; }
+svg { display: block; flex: none; }
+
+/* ---------- shared pieces ---------- */
+.shell { position: fixed; inset: 0; display: grid; grid-template-columns: 260px 1fr; }
+body.side-hidden #app { grid-template-columns: 0 1fr; }
+body.side-hidden .side { visibility: hidden; }
+
+.brand { display: flex; align-items: center; gap: 10px; font-size: 17px; font-weight: 600; letter-spacing: -.01em; }
+.mark { width: 28px; height: 28px; flex: none; position: relative; }
+.mark img { position: absolute; inset: 0; width: 28px; height: 28px; }
+/* Logo follows the appearance: blue tile in light, black tile in dark */
+.mark .logo-dark { display: none; }
+:root[data-theme="dark"] .mark .logo-light { display: none; }
+:root[data-theme="dark"] .mark .logo-dark { display: block; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .mark .logo-light { display: none; }
+  :root:not([data-theme="light"]) .mark .logo-dark { display: block; }
+  :root:not([data-theme="light"]) .scrim { background: rgba(0,0,0,.45); }
+}
+/* Appearance button: sidebar footer, opposite New Category */
+.side-foot .glass-btn { width: 36px; height: 36px; }
+.side-foot .glass-btn svg { width: 18px; height: 18px; }
+.menu .mi-check { margin-left: auto; color: var(--accent); }
+.menu button .mi-check svg { color: var(--accent); width: 14px; height: 14px; }
+
+.btn-primary {
+  display: inline-flex; align-items: center; gap: 6px; height: 36px; padding: 0 16px;
+  border-radius: 980px; background: var(--accent-fill); color: var(--accent-ink);
+  font-size: 15px; font-weight: 500; transition: background .2s;
+}
+.btn-primary:hover { background: var(--accent-fill-hover); }
+.icon-btn {
+  width: 36px; height: 36px; border-radius: 10px; display: grid; place-items: center; color: var(--muted);
+  transition: background .2s, color .2s;
+}
+.icon-btn:hover { background: var(--fill); color: var(--ink); }
+.icon-btn svg { width: 20px; height: 20px; }
+
+.search {
+  display: flex; align-items: center; gap: 6px; height: 36px; padding: 0 10px;
+  border-radius: 10px; background: var(--fill); color: var(--muted);
+}
+.search svg { width: 16px; height: 16px; }
+.search input { border: 0; outline: 0; background: none; width: 100%; font-size: 15px; color: var(--ink); }
+.search input::placeholder { color: var(--muted); }
+.search:focus-within { outline: 2px solid var(--accent); outline-offset: 0; }
+
+/* sidebar */
+.side { display: flex; flex-direction: column; gap: 16px; padding: 20px 12px 12px; min-width: 0; overflow: hidden; }
+.side .brand { padding: 0 8px; }
+.side nav { display: flex; flex-direction: column; gap: 2px; overflow-y: auto; flex: 1; }
+.side-h { margin: 16px 10px 4px; font-size: 13px; font-weight: 600; color: var(--muted); }
+.side-item {
+  display: flex; align-items: center; gap: 10px; min-height: 36px; padding: 0 10px; border-radius: 8px;
+  font-size: 15px; text-align: left; transition: background .15s;
+}
+.side-item:hover { background: var(--fill); }
+.side-item.active { background: var(--fill-strong); font-weight: 500; }
+.side-item svg { width: 18px; height: 18px; color: var(--accent); }
+.side-item .dot { width: 10px; height: 10px; border-radius: 50%; margin: 0 4px; background: var(--c); }
+.side-item .count { margin-left: auto; font-size: inherit; font-weight: 400; color: var(--muted); font-variant-numeric: tabular-nums; }
+.side-foot { display: flex; align-items: center; gap: 4px; padding-top: 8px; border-top: 1px solid var(--sep); }
+.side-foot .text-btn { display: inline-flex; align-items: center; gap: 8px; min-height: 36px; font-size: 15px; color: var(--accent); padding: 0 10px; border-radius: 8px; margin-right: auto; }
+.side-foot .text-btn svg { width: 20px; height: 20px; }
+.side-foot .text-btn:hover { background: var(--fill); }
+
+/* main area */
+.main { min-width: 0; display: flex; flex-direction: column; overflow: hidden; }
+.toolbar { display: flex; align-items: center; gap: 8px; padding: 12px 24px; }
+.toolbar .spacer { flex: 1; }
+.head { padding: 4px 32px 20px; }
+.head h1 { margin: 0; font-size: 34px; line-height: 1.2; font-weight: 700; letter-spacing: -.02em; }
+.head p { margin: 4px 0 0; font-size: 15px; color: var(--muted); }
+.scroll { flex: 1; overflow-y: auto; padding: 0 32px 96px; }
+
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 16px; }
+.empty { color: var(--muted); font-size: 15px; padding: 40px 0; }
+
+/* cards */
+.card {
+  position: relative; display: flex; flex-direction: column; gap: 4px; padding: 20px; border-radius: 18px;
+  background: var(--surface); text-align: left; min-height: 172px;
+}
+.card-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+.tile { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; background: var(--c); color: #fff; }
+.tile svg { width: 22px; height: 22px; }
+.card h2 { margin: 0; font-size: 17px; line-height: 1.3; font-weight: 600; letter-spacing: -.01em; }
+/* The title button stretches over the whole card, so the card stays one click target with a real heading inside */
+.card-link { padding: 0; text-align: left; overflow-wrap: anywhere; }
+.card-link::after { content: ''; position: absolute; inset: 0; border-radius: 18px; }
+.card-link:focus-visible { outline: none; }
+.card:has(.card-link:focus-visible) { outline: 2px solid var(--accent); outline-offset: 2px; }
+.meta { margin: 0; font-size: 13px; color: var(--muted); }
+.next { margin: 10px 0 0; font-size: 13px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.next b { color: var(--ink); font-weight: 500; }
+
+
+/* ---------- Liquid glass ---------- */
+#app { background: var(--bg); }
+
+/* Liquid glass interaction: glint + rim light follow the cursor; the jelly motion is a JS spring */
+/* Buttons (.lg) get the full liquid glass: jelly + glint + rim. */
+:is(#app, .scrim) .lg { position: relative; isolation: isolate; }
+:is(#app, .scrim) .lg::before, :is(#app, .scrim) .lg::after {
+  content: ''; position: absolute; border-radius: inherit; pointer-events: none;
+  opacity: 0; transition: opacity .35s ease;
+}
+:is(#app, .scrim) .lg::after {
+  inset: 0; z-index: -1;
+  background: radial-gradient(240px circle at var(--mx, 50%) var(--my, 50%), var(--glint), transparent 65%);
+}
+:is(#app, .scrim) .lg::before {
+  inset: -1px; padding: 1px;
+  background: radial-gradient(180px circle at var(--mx, 50%) var(--my, 50%), var(--rim), transparent 70%);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor; mask-composite: exclude;
+}
+:is(#app, .scrim) .lg:not(:disabled):hover::before, :is(#app, .scrim) .lg:not(:disabled):hover::after { opacity: 1; }
+#app .scroll { padding-top: 4px; }
+#app .head { padding-bottom: 16px; }
+:is(#app, .scrim) :is(.btn-primary, .btn-danger).lg { --glint: rgba(255,255,255,.35); --rim: rgba(255,255,255,.7); }
+/* Secondary glass capsule (Cancel, Add Phase): same material as the toolbar buttons */
+.btn-secondary.lg {
+  background: var(--btn-glass); border: 1px solid var(--btn-edge); box-shadow: inset 0 1px 0 var(--glass-hi);
+  backdrop-filter: blur(20px) saturate(180%); -webkit-backdrop-filter: blur(20px) saturate(180%);
+}
+.btn-secondary.lg:hover { background: var(--btn-glass-hover); }
+.sheet .btn-secondary.lg { background: var(--fill); } /* on the plain sheet, glass reads as soft grey */
+.sheet .btn-secondary.lg:hover { background: var(--fill-strong); }
+.glass {
+  background: var(--glass);
+  backdrop-filter: blur(28px) saturate(180%); -webkit-backdrop-filter: blur(28px) saturate(180%);
+  border: 1px solid var(--glass-edge);
+  box-shadow: inset 0 1px 0 var(--glass-hi);
+}
+#app .side { margin: 12px 0 12px 12px; border-radius: 22px; }
+#app .side-item:hover { background: var(--side-hover); }
+#app .side-item.active { background: var(--side-active); }
+#app .card { background: var(--glass); backdrop-filter: blur(28px) saturate(180%); -webkit-backdrop-filter: blur(28px) saturate(180%); border: 1px solid var(--glass-edge); box-shadow: inset 0 1px 0 var(--glass-hi); }
+#app .card-top { margin-bottom: 14px; }
+#app .meta, #app .next { color: var(--ink); opacity: .72; } /* vibrancy: no flat gray on glass */
+/* Glass controls: the glass IS the button (one shape), like Apple's toolbar capsules */
+.glass-btn, .glass-group {
+  background: var(--btn-glass); color: var(--ink);
+  backdrop-filter: blur(20px) saturate(180%); -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border: 1px solid var(--btn-edge);
+  box-shadow: 0 4px 16px var(--btn-shadow), inset 0 1px 0 var(--glass-hi);
+  transition: background .25s ease;
+}
+.glass-btn { width: 44px; height: 44px; padding: 0; border-radius: 50%; display: grid; place-items: center; }
+.glass-btn, .glass-group, .toolbar .btn-primary { flex: none; } /* never squeezed by the toolbar, so circles stay circles */
+.glass-group .icon-btn { flex: none; padding: 0; }
+.glass-btn svg { width: 20px; height: 20px; }
+.glass-btn:hover { background: var(--btn-glass-hover); }
+.glass-group { display: flex; align-items: center; gap: 2px; padding: 3px; border-radius: 980px; }
+.glass-group .icon-btn { width: 40px; height: 36px; border-radius: 980px; color: var(--ink); }
+.glass-group .icon-btn:hover { background: var(--btn-item-hover); color: var(--ink); }
+#app .toolbar { padding: 16px 24px 8px; }
+
+.icon-btn.danger:hover { color: var(--danger); }
+.seg-glass { display: flex; gap: 2px; padding: 3px; border-radius: 980px; }
+.seg-glass button {
+  display: inline-flex; align-items: center; gap: 6px; height: 36px; padding: 0 14px; border-radius: 980px;
+  font-size: 13px; font-weight: 600; color: var(--ink); transition: background .2s, color .2s;
+}
+.seg-glass button svg { width: 16px; height: 16px; }
+.seg-glass button:hover { background: var(--btn-item-hover); }
+.seg-glass button.active { color: var(--accent); }
+.seg-glass button.active:hover { background: none; }
+/* Sliding selection: one thumb glides between List and Map with a soft spring overshoot, like iOS segmented controls */
+.seg-glass button { position: relative; z-index: 1; }
+.seg-thumb {
+  position: absolute; z-index: 0; top: 3px; bottom: 3px; left: 0; width: var(--tw, 0); border-radius: 980px;
+  background: var(--side-active); transform: translateX(var(--tx, 0)); pointer-events: none;
+  transition: transform .42s cubic-bezier(.3,1.3,.5,1), width .42s cubic-bezier(.3,1.3,.5,1);
+}
+.seg-thumb.instant { transition: none; }
+/* Collapse-all stays in place in List view, greyed out, so the toolbar never shifts */
+.glass-group .icon-btn:disabled { opacity: .3; cursor: default; background: none; }
+.flow .glass-group .icon-btn[aria-pressed="true"] { color: var(--accent); }
+/* Flowchart cards: same soft glass hover as the map pills (no outline, no motion) */
+#app .card { transition: background .15s; }
+#app .card:hover { background: var(--btn-glass-hover); }
+/* ---------- Sheets (dialogs) ----------
+   One base for every screen: a plain surface sheet over a dimmed, lightly blurred page.
+   Flat: hairline edge, no drop shadow, no gradient. Fields are filled grey, Apple-style. */
+.scrim {
+  position: fixed; inset: 0; z-index: 200; display: grid; place-items: center; padding: 24px;
+  grid-template-columns: minmax(0, 1fr); /* sheets never grow past the screen to fit unwrapped text */
+  background: rgba(0,0,0,.16); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
+  opacity: 0; visibility: hidden; transition: opacity .2s, visibility 0s .2s;
+}
+.scrim.open { opacity: 1; visibility: visible; transition: opacity .2s; }
+:root[data-theme="dark"] .scrim { background: rgba(0,0,0,.45); }
+.sheet {
+  width: min(440px, 100%); max-height: calc(100vh - 48px); display: none; flex-direction: column;
+  background: var(--surface); border: 1px solid var(--sep); border-radius: 24px;
+  transform: scale(.96) translateY(8px); transition: transform .32s cubic-bezier(.2,.8,.2,1);
+}
+.sheet.active { display: flex; }
+.scrim.open .sheet { transform: none; }
+.sheet.wide { width: min(560px, 100%); }
+.sheet.xwide { width: min(760px, 100%); }
+.sheet-head { display: flex; align-items: center; gap: 12px; padding: 20px 20px 4px 24px; }
+.sheet-head h2 { flex: 1; margin: 0; font-size: 20px; line-height: 1.3; font-weight: 600; letter-spacing: -.01em; }
+.sheet-head .icon-btn { width: 32px; height: 32px; border-radius: 50%; background: var(--fill); }
+.sheet-head .icon-btn svg { width: 14px; height: 14px; }
+.sheet-head .close-btn { border: 1px solid var(--btn-edge); box-shadow: inset 0 1px 0 var(--glass-hi); color: var(--ink); flex: none; padding: 0; }
+.sheet-head .close-btn:hover { background: var(--fill-strong); }
+.sheet-sub { margin: 0; padding: 0 24px; font-size: 15px; color: var(--muted); }
+.sheet-sub code { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 13px; }
+.sheet-body { padding: 16px 24px 4px; overflow-y: auto; display: flex; flex-direction: column; gap: 16px; }
+.sheet-foot { display: flex; align-items: center; justify-content: flex-end; gap: 8px; padding: 16px 20px 20px 24px; }
+.sheet-foot .note { margin-right: auto; font-size: 13px; color: var(--muted); display: inline-flex; align-items: center; gap: 6px; }
+.sheet-foot .note.ok { color: var(--green); }
+.sheet-foot .note.bad { color: var(--danger); }
+.sheet-foot .note svg { width: 12px; height: 12px; }
+
+.btn-secondary {
+  display: inline-flex; align-items: center; gap: 6px; height: 36px; padding: 0 16px; border-radius: 980px;
+  background: var(--fill); font-size: 15px; font-weight: 500; transition: background .2s;
+}
+.btn-secondary:hover { background: var(--fill-strong); }
+.btn-danger { display: inline-flex; align-items: center; height: 36px; padding: 0 16px; border-radius: 980px; background: var(--danger-fill); color: #fff; font-size: 15px; font-weight: 500; transition: background .2s; }
+.btn-danger:hover { background: var(--danger-fill-hover); }
+.btn-primary:disabled { opacity: .4; cursor: default; }
+.btn-primary svg { width: 16px; height: 16px; }
+
+.field { display: flex; flex-direction: column; gap: 6px; }
+.field > span, .field-label { font-size: 13px; font-weight: 600; color: var(--muted); }
+.input, .textarea {
+  width: 100%; border: 1px solid transparent; border-radius: 12px; background: var(--field);
+  font: inherit; font-size: 15px; color: var(--ink); outline: none; transition: border-color .15s, background .15s;
+}
+.input { height: 44px; padding: 0 14px; }
+.textarea { padding: 12px 14px; line-height: 1.47; resize: vertical; min-height: 120px; }
+.input:focus, .textarea:focus { border-color: var(--accent); background: var(--surface); }
+.input::placeholder, .textarea::placeholder { color: var(--muted); }
+.hint { margin: 0; font-size: 13px; line-height: 1.38; color: var(--muted); }
+.field > .hint { font-weight: 400; }
+.hint a { color: var(--accent); text-decoration: none; }
+.hint a:hover { text-decoration: underline; }
+.code { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 13px; line-height: 1.55; min-height: 340px; white-space: pre; tab-size: 2; }
+.code.bad { border-color: var(--danger); }
+
+/* category colours: Reminders-style swatches */
+.swatches { display: flex; flex-wrap: wrap; gap: 12px; }
+.swatch { width: 32px; height: 32px; padding: 0; border-radius: 50%; background: var(--sw); display: grid; place-items: center; color: #fff; }
+.swatch svg { width: 100%; height: 100%; opacity: 0; transition: opacity .15s; }
+.swatch[aria-checked="true"] { outline: 2px solid var(--sw); outline-offset: 2px; }
+.swatch[aria-checked="true"] svg { opacity: 1; }
+.preview-row { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 12px; background: var(--field); font-size: 15px; }
+.preview-row .dot { width: 12px; height: 12px; border-radius: 50%; background: var(--c); flex: none; }
+.preview-row .muted { margin-left: auto; color: var(--muted); font-size: 13px; }
+
+/* segmented choice (category picker, import method) */
+.seg { display: flex; padding: 3px; gap: 2px; border-radius: 12px; background: var(--field); }
+.seg button { flex: 1; height: 34px; border-radius: 9px; font-size: 14px; font-weight: 500; color: var(--muted); display: inline-flex; align-items: center; justify-content: center; gap: 6px; transition: background .15s, color .15s; }
+.seg button[aria-checked="true"] { background: var(--surface); color: var(--ink); outline: 1px solid var(--sep); }
+
+/* category chips: wrap, so any number of categories fits */
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chips button { display: inline-flex; align-items: center; gap: 8px; height: 36px; padding: 0 14px; border-radius: 980px; background: var(--field); font-size: 14px; font-weight: 500; border: 1px solid transparent; transition: background .15s, border-color .15s; }
+.chips button:hover { background: var(--fill); }
+.chips button .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--c); }
+.chips button[aria-checked="true"] { background: var(--surface); border-color: var(--accent); color: var(--accent); }
+
+/* drop zone (AI files, JSON import) */
+.drop {
+  display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 24px; border-radius: 14px; text-align: center;
+  width: 100%; border: 1.5px dashed var(--fill-strong); color: var(--muted); font-size: 15px; transition: border-color .15s, background .15s;
+}
+.drop svg { width: 26px; height: 26px; color: var(--accent); }
+.drop b { color: var(--accent); font-weight: 500; }
+.drop:hover, .drop.over { border-color: var(--accent); background: var(--field); }
+.files { display: flex; flex-wrap: wrap; gap: 8px; }
+.files:empty { display: none; }
+.file-chip { display: inline-flex; align-items: center; gap: 8px; height: 32px; padding: 0 6px 0 12px; border-radius: 980px; background: var(--field); font-size: 13px; }
+.file-chip button { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; color: var(--muted); }
+.file-chip button:hover { background: var(--fill-strong); color: var(--ink); }
+.file-chip button svg { width: 10px; height: 10px; }
+
+/* AI key: grouped row, like an iOS settings cell */
+.key-row { display: flex; align-items: center; gap: 12px; padding: 0 6px 0 14px; height: 48px; border-radius: 12px; background: var(--field); font-size: 15px; }
+.key-row[hidden] { display: none; }
+.key-row.edit { padding: 0; background: none; gap: 8px; height: auto; }
+.key-row.edit .btn-primary { height: 44px; }
+.key-row .ok { display: inline-flex; align-items: center; gap: 8px; flex: 1; }
+.key-row .ok svg { width: 18px; height: 18px; color: var(--green-fill); }
+.key-row .link-btn { height: 36px; padding: 0 12px; border-radius: 9px; color: var(--accent); font-size: 15px; }
+.key-row .link-btn:hover { background: var(--fill); }
+.spinner { width: 16px; height: 16px; border-radius: 50%; border: 2px solid rgba(255,255,255,.4); border-top-color: #fff; animation: spin .8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Alert (clear / delete): compact, centred, iOS alert proportions */
+.sheet.alert { width: min(320px, 100%); text-align: center; }
+.alert-body { padding: 24px 24px 4px; display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.alert-icon { width: 52px; height: 52px; border-radius: 50%; display: grid; place-items: center; background: rgba(255,59,48,.12); color: var(--danger); margin-bottom: 4px; }
+.alert-icon svg { width: 24px; height: 24px; }
+.alert-body h2 { margin: 0; font-size: 17px; line-height: 1.3; font-weight: 600; }
+.alert-body p { margin: 0; font-size: 13px; line-height: 1.38; color: var(--muted); }
+.alert .sheet-foot { padding: 16px; }
+.alert .sheet-foot > button { flex: 1; justify-content: center; height: 44px; }
+
+@media (prefers-reduced-motion: reduce) { .sheet, .scrim { transition: none; } .spinner { animation-duration: 2s; } }
+
+/* ---------- Context menu (right-click) ----------
+   macOS-style menu: translucent surface, 32px rows, soft grey highlight (no accent fill), red for destructive. */
+.menu {
+  position: fixed; z-index: 210; min-width: 224px; max-width: 280px; padding: 6px; border-radius: 14px;
+  background: color-mix(in srgb, var(--surface) 86%, transparent); border: 1px solid var(--sep);
+  backdrop-filter: blur(30px) saturate(180%); -webkit-backdrop-filter: blur(30px) saturate(180%);
+  font-size: 14px; opacity: 0; visibility: hidden; transform: scale(.97); transform-origin: var(--ox, 0) var(--oy, 0);
+  transition: opacity .12s, transform .12s, visibility 0s .12s;
+}
+.menu.open { opacity: 1; visibility: visible; transform: none; transition: opacity .12s, transform .12s; }
+.menu-h { padding: 6px 10px 4px; font-size: 12px; font-weight: 600; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.menu button { display: flex; align-items: center; gap: 10px; width: 100%; height: 32px; padding: 0 10px; border-radius: 8px; text-align: left; white-space: nowrap; }
+.menu button svg { width: 16px; height: 16px; color: var(--muted); }
+.menu button:hover, .menu button:focus-visible { background: var(--btn-item-hover); outline: none; }
+.menu button.danger, .menu button.danger svg { color: var(--danger); }
+.menu hr { border: 0; height: 1px; background: var(--sep); margin: 5px 10px; }
+
+/* Pop-up button (model picker): the field shows the choice; a listbox opens beneath it with a tick on the current one */
+.dd {
+  width: 100%; height: 44px; display: flex; align-items: center; gap: 10px; padding: 0 12px 0 14px; border-radius: 12px;
+  background: var(--field); border: 1px solid transparent; text-align: left; transition: border-color .15s, background .15s;
+}
+.dd:hover { background: var(--fill); }
+.dd[aria-expanded="true"], .dd:focus-visible { border-color: var(--accent); background: var(--surface); outline: none; }
+.dd-val { flex: 1; min-width: 0; display: flex; align-items: baseline; gap: 8px; white-space: nowrap; overflow: hidden; }
+.dd-name { font-size: 15px; font-weight: 500; }
+.dd-note { font-size: 13px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; }
+.dd-chev svg { width: 16px; height: 16px; color: var(--muted); }
+.dd-chev { flex: none; display: grid; place-items: center; }
+.dd-pop {
+  position: fixed; z-index: 215; padding: 6px; border-radius: 14px; max-height: 320px; overflow-y: auto;
+  background: color-mix(in srgb, var(--surface) 92%, transparent); border: 1px solid var(--sep);
+  backdrop-filter: blur(30px) saturate(180%); -webkit-backdrop-filter: blur(30px) saturate(180%);
+  opacity: 0; visibility: hidden; transform: translateY(-4px) scale(.98); transform-origin: top center;
+  transition: opacity .14s, transform .18s cubic-bezier(.2,.8,.2,1), visibility 0s .18s;
+}
+.dd-pop.up { transform-origin: bottom center; }
+.dd-pop.open { opacity: 1; visibility: visible; transform: none; transition: opacity .14s, transform .18s cubic-bezier(.2,.8,.2,1); }
+.dd-h { padding: 8px 10px 4px; font-size: 12px; font-weight: 600; color: var(--muted); }
+.dd-opt { display: grid; grid-template-columns: 16px 1fr; align-items: center; column-gap: 10px; width: 100%; padding: 7px 10px; border-radius: 8px; text-align: left; }
+.dd-opt svg { width: 14px; height: 14px; color: var(--accent); opacity: 0; }
+.dd-opt[aria-selected="true"] svg { opacity: 1; }
+.dd-opt b { font-size: 14px; font-weight: 500; }
+.dd-opt small { grid-column: 2; font-size: 12px; color: var(--muted); }
+.dd-opt:hover, .dd-opt.hl { background: var(--btn-item-hover); }
+.dd-pop hr { border: 0; height: 1px; background: var(--sep); margin: 5px 10px; }
+
+/* Flowchart title: click to rename in place */
+.flow-head h1[contenteditable] { cursor: text; border-radius: 10px; padding: 0 8px; margin-left: -8px; outline: none; transition: background .15s; }
+.flow-head h1[contenteditable]:hover { background: var(--side-hover); }
+.flow-head h1[contenteditable]:focus { background: var(--surface); outline: 2px solid var(--accent); outline-offset: 0; }
+
+/* Toast (export confirmation) */
+.toast {
+  position: fixed; left: 50%; bottom: 76px; z-index: 205; display: flex; align-items: center; gap: 8px;
+  padding: 10px 16px; border-radius: 980px; font-size: 14px; font-weight: 500;
+  background: var(--btn-glass); border: 1px solid var(--btn-edge); box-shadow: inset 0 1px 0 var(--glass-hi);
+  backdrop-filter: blur(24px) saturate(180%); -webkit-backdrop-filter: blur(24px) saturate(180%);
+  opacity: 0; visibility: hidden; transform: translate(-50%, 8px); transition: opacity .2s, transform .3s cubic-bezier(.2,.8,.2,1), visibility 0s .3s;
+}
+.toast.show { opacity: 1; visibility: visible; transform: translate(-50%, 0); transition: opacity .2s, transform .3s cubic-bezier(.2,.8,.2,1); }
+.toast svg { width: 18px; height: 18px; color: var(--green-fill); }
+.chips button.none .dot { background: none; border: 1.5px dashed var(--muted); }
+@media (prefers-reduced-motion: reduce) { .menu, .toast { transition: none; } }
+/* Small icon buttons keep their look but get a 44px hit area */
+.glass-group .icon-btn, .seg-glass button { position: relative; }
+.glass-group .icon-btn::after, .seg-glass button::after { content: ''; position: absolute; inset: -4px -2px; }
+.phone-only, .side-scrim { display: none; }
+
+/* Phone: the sidebar slides over the page; flowchart actions fold into one More menu */
+@media (max-width: 760px) {
+  .shell, body.side-hidden #app { grid-template-columns: 1fr; }
+  #app .side {
+    position: fixed; z-index: 55; top: 12px; bottom: 12px; left: 12px; margin: 0; width: min(280px, calc(100vw - 48px));
+    background: color-mix(in srgb, var(--surface) 90%, transparent);
+    visibility: hidden; transform: translateX(calc(-100% - 24px));
+    transition: transform .32s cubic-bezier(.2,.8,.2,1), visibility 0s .32s;
+  }
+  body.side-open #app .side { visibility: visible; transform: none; transition: transform .32s cubic-bezier(.2,.8,.2,1); }
+  .side-scrim {
+    display: block; position: fixed; inset: 0; z-index: 54; background: rgba(0,0,0,.16);
+    opacity: 0; visibility: hidden; transition: opacity .2s, visibility 0s .2s;
+  }
+  body.side-open .side-scrim { opacity: 1; visibility: visible; transition: opacity .2s; }
+  #app .toolbar { padding: 16px 16px 8px; }
+  .head, .scroll, .flow-head, .flow-body { padding-left: 16px; padding-right: 16px; }
+  .flow-head { gap: 16px; }
+  #app .pager { right: 16px; bottom: 16px; }
+  .toolbar .btn-primary { height: 44px; }
+  .phone-only { display: grid; }
+  .flow .toolbar .desk-only { display: none; }
+  .seg-glass button { width: 44px; padding: 0; justify-content: center; }
+  .seg-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+}
+@media (max-width: 760px) and (prefers-reduced-motion: reduce) { #app .side, .side-scrim { transition: none; } }
+@media (prefers-reduced-motion: reduce) {
+  .seg-thumb { transition: none; }
+  .fill .check, .fill .check svg path, .step::after, svg.links path.grow, .done-mark.just { animation: none !important; }
+}
+@media (prefers-reduced-transparency: reduce) {
+  .glass, #app .card { background: var(--surface); backdrop-filter: none; }
+}
+
+/* ---------- Flowchart view ---------- */
+.main[data-view="grid"] .flow, .main[data-view="flow"] .grid-view { display: none; }
+.grid-view, .flow { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+.role { display: block; font-size: 13px; line-height: 1.38; font-weight: 500; color: var(--muted); }
+.panel {
+  background: var(--glass); border: 1px solid var(--glass-edge); box-shadow: inset 0 1px 0 var(--glass-hi);
+  backdrop-filter: blur(28px) saturate(180%); -webkit-backdrop-filter: blur(28px) saturate(180%);
+}
+
+.flow-head { display: flex; align-items: center; justify-content: space-between; gap: 24px; padding: 4px 32px 20px; }
+.flow-head h1 { margin: 0; overflow-wrap: anywhere; font-size: 34px; line-height: 1.2; font-weight: 700; letter-spacing: -.02em; }
+.flow-head p { margin: 4px 0 0; font-size: 15px; color: var(--muted); }
+.flow-body { flex: 1; overflow: auto; padding: 4px 32px 96px; }
+
+/* List: phases as glass columns, steps as Reminders-style rows */
+/* columns share the width so a typical flowchart fits on one screen; very wide ones scroll sideways */
+.columns { display: flex; gap: 16px; align-items: flex-start; min-width: min-content; }
+.phase { flex: 1 1 0; min-width: 220px; max-width: 340px; border-radius: 22px; padding: 16px 8px 8px; }
+.phase-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; padding: 0 10px 8px; }
+.phase-head h2 { margin: 0; font-size: 20px; line-height: 1.3; font-weight: 600; letter-spacing: -.01em; }
+.phase-count { flex: none; font-size: 13px; font-weight: 600; color: var(--muted); font-variant-numeric: tabular-nums; }
+.done > .phase-head .phase-count, .group.done > .group-head .phase-count { color: var(--green); }
+.steps { list-style: none; margin: 0; padding: 0; }
+.steps li { position: relative; }
+.step, .group-head {
+  position: relative; width: 100%; display: flex; align-items: flex-start; gap: 12px;
+  padding: 10px; border-radius: 12px; text-align: left; transition: background .15s;
+}
+.step:hover, .group-head:hover { background: var(--side-hover); }
+.check {
+  flex: none; width: 22px; height: 22px; margin-top: 1px; border-radius: 50%; display: grid; place-items: center;
+  border: 1.5px solid var(--check-ring); background: var(--surface); color: #fff; transition: background .2s, border-color .2s;
+}
+/* Done, as in Apple Notes checklists: the circle fills and a white tick sits inside */
+/* The tick spans the whole circle (border included), so its padding is the same at every size */
+.check { --s: 22px; position: relative; width: var(--s); height: var(--s); }
+.check svg { position: absolute; left: 50%; top: 50%; width: var(--s); height: var(--s); translate: -50% -50%; opacity: 0; transition: opacity .2s; }
+.step.done .check, .leaf.done .check { background: var(--green-fill); border-color: var(--green-fill); }
+.step.done .check svg, .leaf.done .check svg { opacity: 1; }
+.step-title, .group-title { display: block; font-size: 15px; line-height: 1.4; }
+.group-title { font-weight: 600; }
+.step.done .step-title { color: var(--muted); }
+/* timeline: a hairline joins each step's circle to the next one */
+.steps > li:not(:last-child) > .step::after {
+  content: ''; position: absolute; left: 20px; top: 35px; bottom: -11px; width: 1.5px; border-radius: 1px; background: var(--line);
+}
+.group-head svg.chev { width: 16px; height: 16px; margin: 4px 3px 0; color: var(--muted); transform: rotate(90deg); transition: transform .25s cubic-bezier(.2,.8,.2,1); }
+.group.collapsed > .group-head svg.chev { transform: none; }
+.group-head > span:nth-child(2) { flex: 1; }
+.group.collapsed > .nested { display: none; }
+.nested { margin-left: 22px; }
+.add-row { display: flex; align-items: center; gap: 12px; width: 100%; padding: 10px; border-radius: 12px; font-size: 15px; color: var(--accent); }
+.add-row svg { width: 22px; height: 22px; }
+.add-row:hover { background: var(--side-hover); }
+.add-rows { display: flex; flex-wrap: wrap; }
+.add-rows .add-row { width: auto; flex: 1 1 auto; white-space: nowrap; }
+
+/* Completing a step: the circle pops, the tick draws, and the line below it fills green top to bottom.
+   Un-completing runs it backwards. Only the step that just changed animates (.fill / .unfill, one render). */
+.steps > li:not(:last-child) > .step::after { background-image: linear-gradient(var(--green-fill), var(--green-fill)); background-repeat: no-repeat; background-size: 100% 0; }
+.steps > li:not(:last-child) > .step.done::after { background-size: 100% 100%; }
+.steps > li:not(:last-child) > .step.fill::after { animation: line-fill .45s cubic-bezier(.2,.8,.2,1) .12s both; }
+.steps > li:not(:last-child) > .step.unfill::after { animation: line-fill .35s cubic-bezier(.4,0,.2,1) reverse both; }
+@keyframes line-fill { from { background-size: 100% 0; } to { background-size: 100% 100%; } }
+.fill .check { animation: check-pop .35s cubic-bezier(.2,.8,.2,1); }
+.fill .check svg path { stroke-dasharray: 1; animation: draw .3s cubic-bezier(.2,.8,.2,1) .08s both; }
+@keyframes check-pop { 0% { transform: scale(.82); } 60% { transform: scale(1.08); } 100% { transform: scale(1); } }
+@keyframes draw { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
+svg.links path.grow { stroke-dasharray: 1; animation: draw .5s cubic-bezier(.2,.8,.2,1) .1s both; }
+
+/* Map: pill nodes, soft rounded connectors; steps stack under their parent so it fits on screen */
+/* Connectors are drawn in one SVG layer (drawLinks), so each line can be coloured by what it leads to. */
+.map { position: relative; width: max-content; min-width: 100%; display: flex; justify-content: center; padding-top: 4px; }
+.tree, .tree ul { list-style: none; margin: 0; padding: 0; display: flex; justify-content: center; }
+.tree ul { padding-top: 32px; }
+.tree li { display: flex; flex-direction: column; align-items: center; padding: 0 6px; }
+.tree ul.stack { flex-direction: column; align-items: center; gap: 14px; }
+.tree ul.stack > li { padding: 0; }
+.tree li.leafcol > ul.stack { padding-top: 0; }
+svg.links { position: absolute; left: 0; top: 0; overflow: visible; pointer-events: none; }
+svg.links path { fill: none; stroke: var(--link); stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+svg.links path.done { stroke: var(--green-fill); }
+
+/* One standard pill: fixed width, text wraps instead of stretching the pill */
+.node {
+  position: relative; z-index: 1;
+  display: flex; align-items: center; gap: 10px; width: 180px; min-height: 48px; padding: 7px 14px; border-radius: 26px;
+  background: var(--glass); border: 1px solid var(--btn-edge); box-shadow: inset 0 1px 0 var(--glass-hi);
+  backdrop-filter: blur(28px) saturate(180%); -webkit-backdrop-filter: blur(28px) saturate(180%);
+  font-size: 14px; line-height: 1.3; text-align: left; transition: background .15s;
+}
+.node .node-text { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.node.root { width: 240px; }
+.node:hover { background: var(--btn-glass-hover); }
+.node .role { font-size: 11px; line-height: 1.3; }
+.node.leaf { padding-left: 10px; }
+.node.leaf .check { --s: 20px; margin: 0; }
+.node.leaf.done .node-text { color: var(--muted); }
+.node.branch { font-weight: 600; }
+.node.root { font-size: 17px; font-weight: 600; min-height: 52px; padding: 8px 20px; }
+
+
+/* Page through flowcharts: floating capsule, bottom right, away from Back */
+.flow { position: relative; }
+#app .pager { position: absolute; right: 24px; bottom: 24px; z-index: 5; }
+.pager .count { padding: 0 6px; font-size: 13px; font-weight: 600; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.node .count { font-size: 13px; font-weight: 600; color: var(--muted); font-variant-numeric: tabular-nums; }
+.node.done .count { color: var(--green); }
+.node .chev { display: inline-flex; color: var(--muted); }
+.node .chev svg { width: 14px; height: 14px; transition: transform .25s cubic-bezier(.2,.8,.2,1); }
+.node .chev.open svg { transform: rotate(90deg); }
+
+.all-done { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 64px 0; text-align: center; color: var(--muted); }
+.all-done .done-mark svg { width: 44px; height: 44px; }
+.all-done h2 { margin: 0; font-size: 22px; font-weight: 600; color: var(--ink); }
+.all-done .text-btn { margin-top: 8px; font-size: 15px; color: var(--accent); padding: 8px 12px; border-radius: 8px; }
+.empty-flow > svg { color: var(--muted); }
+.empty-actions { display: flex; gap: 8px; margin-top: 12px; }
+.empty-actions svg { width: 16px; height: 16px; }
+.all-done .text-btn:hover { background: var(--side-hover); }
+
+/* Flowchart view: the scroller is the clip for hide/show View Transitions (named ft-canvas in JS) */
+.flow-head > div:first-child { min-width: 0; }
+.steps .step:focus-visible, .group-head:focus-visible, .add-row:focus-visible, .node:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+
+
+/* ---------- Real-app additions ---------- */
+/* Drag a card onto a sidebar category to move it there */
+#app .card[draggable="true"] { -webkit-user-drag: element; }
+#app .card.dragging { opacity: .45; }
+#app .side-item.drop-target { background: var(--side-active); outline: 2px solid var(--accent); outline-offset: -2px; }
+.sheet .hint.warn { color: var(--danger); }
+.side-item .side-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.key-row .link-btn.danger { color: var(--danger); }
+@media (max-width: 760px) { .key-row { gap: 4px; } .key-row .link-btn { padding: 0 8px; } }
+.key-row .ok { min-width: 0; }
+.key-row .ok > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+[data-ai-icon] { display: contents; }
+.btn-primary .spinner { flex: none; }
+
+/* ===== Hide completed (Apple Reminders style) ===== */
+/* Hiding/showing runs as a View Transition (see _renderWithTransition): nodes that stay
+   glide to their new place, nodes that leave fade and settle, nodes that arrive fade in. */
+::view-transition-group(*) {
+    animation-duration: 0.42s;
+    animation-timing-function: cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+/* Keep nodes inside their scroll areas while they move (nested groups): the canvas, and
+   the view's sideways scroller, which cuts off the column/branch at its right edge. */
+::view-transition-group-children(ft-canvas),
+::view-transition-group-children(ft-columns),
+::view-transition-group-children(ft-map-lines) {
+    overflow: clip;
+}
+
+::view-transition-old(*),
+::view-transition-new(*) {
+    animation-duration: 0.3s;
+    animation-timing-function: ease;
+}
+
+::view-transition-old(*):only-child {
+    animation: ft-vt-leave 0.18s cubic-bezier(0.4, 0, 1, 1) both;
+}
+
+::view-transition-new(*):only-child {
+    animation: ft-vt-enter 0.34s cubic-bezier(0, 0, 0.2, 1) 0.08s both;
+}
+
+/* Map connectors: old lines clear quickly, new lines draw in once the cards have moved. */
+::view-transition-old(ft-map-lines) {
+    animation: ft-vt-fade-out 0.12s ease-out both;
+}
+
+::view-transition-new(ft-map-lines) {
+    animation: ft-vt-fade-in 0.24s ease-out 0.2s both;
+}
+
+@keyframes ft-vt-fade-out {
+    to { opacity: 0; }
+}
+
+@keyframes ft-vt-fade-in {
+    from { opacity: 0; }
+}
+
+@keyframes ft-vt-leave {
+    to { opacity: 0; transform: scale(0.96); }
+}
+
+@keyframes ft-vt-enter {
+    from { opacity: 0; transform: scale(0.97); }
+}
+
+/* Option C (Reminders list style): title in the category colour, category in grey below,
+   the number of steps left as the big figure on the right; a finished flowchart shows the Notes-style check */
+.flow-head h1 { color: var(--c, var(--ink)); }
+.left-count { text-align: right; font-variant-numeric: tabular-nums; color: var(--ink); white-space: nowrap; }
+.left-count strong { display: block; font-size: 34px; line-height: 1; font-weight: 700; letter-spacing: -.02em; }
+.left-count small { display: block; margin-top: 4px; font-size: 13px; color: var(--muted); }
+.card .left-count strong { font-size: 28px; }
+.done-mark { display: grid; place-items: center; color: var(--green-fill); }
+.done-mark svg { width: 28px; height: 28px; }
+.flow-head .done-mark svg { width: 44px; height: 44px; }
+.done-mark.just { animation: check-pop .4s cubic-bezier(.2,.8,.2,1); }
+.phase-count svg, .node .count svg { width: 16px; height: 16px; color: var(--green-fill); display: block; }
+.phase-head .phase-count { font-size: 20px; line-height: 1; font-weight: 700; color: var(--ink); }
+.phase-head .phase-count svg { width: 20px; height: 20px; }
