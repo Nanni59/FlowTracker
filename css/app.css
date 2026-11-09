@@ -318,20 +318,68 @@ body.side-hidden .side { visibility: hidden; }
 .chips button .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--c); }
 .chips button[aria-checked="true"] { background: var(--surface); border-color: var(--accent); color: var(--accent); }
 
-/* drop zone (AI files, JSON import) */
+/* Upload box (AI attachments, JSON import): click or drop. Hover and focus tint the rim, add a soft ring
+   and fan out three file tiles; with files over it the box washes blue and a light runs round the edge.
+   Flat like the rest of the app: the ring is an outline and the tiles have hairline edges, no shadows. */
+@property --trail { syntax: "<angle>"; inherits: false; initial-value: 0deg; }
 .drop {
-  display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 24px; border-radius: 14px; text-align: center;
-  width: 100%; border: 1.5px dashed var(--fill-strong); color: var(--muted); font-size: 15px; transition: border-color .15s, background .15s;
+  position: relative; isolation: isolate; width: 100%; min-height: 184px; padding: 24px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
+  border-radius: 16px; border: 1px solid var(--sep); background: var(--field); text-align: center;
+  outline: 4px solid transparent; outline-offset: 0;
+  transition: background-color .2s, border-color .2s, outline-color .2s;
 }
-.drop svg { width: 26px; height: 26px; color: var(--accent); }
-.drop b { color: var(--accent); font-weight: 500; }
-.drop:hover, .drop.over { border-color: var(--accent); background: var(--field); }
-.files { display: flex; flex-wrap: wrap; gap: 8px; }
-.files:empty { display: none; }
-.file-chip { display: inline-flex; align-items: center; gap: 8px; height: 32px; padding: 0 6px 0 12px; border-radius: 980px; background: var(--field); font-size: 13px; }
-.file-chip button { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; color: var(--muted); }
-.file-chip button:hover { background: var(--fill-strong); color: var(--ink); }
-.file-chip button svg { width: 10px; height: 10px; }
+.drop::after {   /* the running light: a conic arc masked to the 1.5px rim */
+  content: ''; position: absolute; inset: -1px; border-radius: inherit; padding: 1.5px; pointer-events: none;
+  background: conic-gradient(from var(--trail), transparent 0 62%, color-mix(in srgb, var(--accent) 75%, transparent) 82%, transparent 96%);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
+  opacity: 0; transition: opacity .2s;
+}
+.drop:hover { border-color: color-mix(in srgb, var(--accent) 45%, var(--sep)); outline-color: color-mix(in srgb, var(--accent) 8%, transparent); }
+.drop:focus-visible { border-color: var(--accent); outline-color: color-mix(in srgb, var(--accent) 22%, transparent); }
+.drop.over { background: color-mix(in srgb, var(--accent) 9%, var(--field)); border-color: color-mix(in srgb, var(--accent) 45%, var(--sep)); outline-color: color-mix(in srgb, var(--accent) 12%, transparent); }
+.drop.over::after { opacity: 1; animation: drop-trail 2.6s linear infinite; }
+@keyframes drop-trail { to { --trail: 360deg; } }
+.drop-stack { position: relative; width: 84px; height: 60px; margin-bottom: 10px; color: var(--muted); transition: color .2s; }
+.drop-tile {
+  position: absolute; left: 50%; top: 50%; width: 44px; height: 54px; margin: -27px 0 0 -22px;
+  display: grid; place-items: center; border-radius: 12px; background: var(--surface); border: 1px solid var(--line);
+  transition: transform .28s cubic-bezier(.2,.8,.2,1), border-color .2s;
+}
+.drop-tile svg { width: 24px; height: 24px; }
+.drop-tile.l { transform: translateX(-9px) rotate(-9deg) scale(.9); }
+.drop-tile.r { transform: translateX(9px) rotate(9deg) scale(.9); }
+.drop:hover .drop-stack, .drop:focus-visible .drop-stack, .drop.over .drop-stack { color: var(--accent); }
+.drop:hover .drop-tile.l, .drop:focus-visible .drop-tile.l { transform: translateX(-19px) rotate(-15deg) scale(.92); }
+.drop:hover .drop-tile.r, .drop:focus-visible .drop-tile.r { transform: translateX(19px) rotate(15deg) scale(.92); }
+.drop:hover .drop-tile.front, .drop:focus-visible .drop-tile.front { transform: translateY(-3px); border-color: color-mix(in srgb, var(--accent) 40%, var(--line)); }
+.drop.over .drop-tile.l { transform: translate(-24px, -2px) rotate(-20deg) scale(.94); }
+.drop.over .drop-tile.r { transform: translate(24px, -2px) rotate(20deg) scale(.94); }
+.drop.over .drop-tile.front { transform: translateY(-7px) scale(1.04); border-color: var(--accent); }
+.drop:active .drop-tile.front { transform: translateY(-1px) scale(.98); }
+.drop-t { font-size: 15px; font-weight: 500; color: var(--ink); }
+.drop-d { max-width: 320px; font-size: 13px; line-height: 1.38; color: var(--muted); }
+@media (prefers-reduced-motion: reduce) {
+  .drop-tile { transition: none; }
+  .drop.over::after { animation: none; }
+}
+
+/* Chosen files: a grouped list under the box, like an iOS settings group */
+.file-list { margin-top: 6px; border-radius: 12px; background: var(--field); overflow: hidden; }
+.file-list:empty { display: none; }
+.file-row { display: flex; align-items: center; gap: 12px; padding: 10px 8px 10px 12px; }
+.file-row + .file-row { border-top: 1px solid var(--sep); }
+.file-thumb { width: 40px; height: 40px; flex: none; border-radius: 10px; display: grid; place-items: center; background: var(--fill) center / cover; color: var(--muted); }
+.file-thumb svg { width: 20px; height: 20px; }
+.file-meta { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.file-name { font-size: 14px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.file-sub { font-size: 12px; color: var(--muted); }
+.file-ready { flex: none; height: 24px; padding: 0 10px; border-radius: 980px; display: inline-flex; align-items: center; background: color-mix(in srgb, var(--green-fill) 16%, transparent); color: var(--green); font-size: 12px; font-weight: 600; }
+.file-x { flex: none; width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; color: var(--muted); transition: background .15s; }
+.file-x:hover { background: var(--fill-strong); color: var(--ink); }
+.file-x svg { width: 12px; height: 12px; }
+@media (pointer: coarse) { .file-x { width: 44px; height: 44px; } }
 
 /* AI key: grouped row, like an iOS settings cell */
 .key-row { display: flex; align-items: center; gap: 12px; padding: 0 6px 0 14px; height: 48px; border-radius: 12px; background: var(--field); font-size: 15px; }
@@ -590,7 +638,52 @@ svg.links path.done { stroke: var(--green-fill); }
 /* Drag a card onto a sidebar category to move it there */
 #app .card[draggable="true"] { -webkit-user-drag: element; }
 #app .card.dragging { opacity: .45; }
-#app .side-item.drop-target { background: var(--side-active); outline: 2px solid var(--accent); outline-offset: -2px; }
+#app .side-row.drop-target .side-item { background: var(--side-active); outline: 2px solid var(--accent); outline-offset: -2px; }
+
+/* ⋯ on category rows and cards: opens the same menu as right-click. Hidden until hover or keyboard focus
+   on pointer devices; always shown on touch, where there is no hover. */
+.side-row { position: relative; }
+.side-row .side-item { width: 100%; }
+.side-more {
+  position: absolute; right: 5px; top: 50%; width: 28px; height: 28px; margin-top: -14px; border-radius: 6px;
+  display: grid; place-items: center; color: var(--muted); opacity: 0; pointer-events: none; transition: opacity .12s, background .15s;
+}
+.side-more svg { width: 18px; height: 18px; }
+.side-more:hover { background: var(--fill); color: var(--ink); }
+.side-more:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.side-row .count { transition: opacity .12s; }
+.side-row:hover .side-more, .side-more:focus-visible, .side-more[aria-expanded="true"] { opacity: 1; pointer-events: auto; }
+.side-row:hover .count, .side-row:has(.side-more:focus-visible, .side-more[aria-expanded="true"]) .count { opacity: 0; }
+#app .side-row:hover .side-item { background: var(--side-hover); }
+#app .side-row:hover .side-item.active { background: var(--side-active); }
+
+.card-more {
+  position: absolute; z-index: 2; top: 24px; right: 16px; width: 32px; height: 32px; border-radius: 50%;
+  display: grid; place-items: center; color: var(--ink);
+  background: var(--btn-glass); border: 1px solid var(--btn-edge); box-shadow: inset 0 1px 0 var(--glass-hi);
+  opacity: 0; transform: translateY(-2px); transition: opacity .16s, transform .24s cubic-bezier(.2,.8,.2,1), background .15s;
+}
+.card-more svg { width: 18px; height: 18px; }
+.card-more:hover { background: var(--btn-glass-hover); }
+.card-more:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.card .card-top > :last-child:not(.tile) { transition: opacity .16s; }
+.card:hover .card-more, .card:focus-within .card-more, .card-more[aria-expanded="true"] { opacity: 1; transform: none; }
+.card:hover .card-top > :last-child:not(.tile), .card:focus-within .card-top > :last-child:not(.tile),
+.card:has(.card-more[aria-expanded="true"]) .card-top > :last-child:not(.tile) { opacity: 0; }
+
+@media (hover: none) {   /* no hover: ⋯ always shows, and the steps-left figure moves left to make room */
+  .card-more { opacity: 1; transform: none; }
+  .card .card-top { padding-right: 40px; }
+  .card:hover .card-top > :last-child:not(.tile), .card:focus-within .card-top > :last-child:not(.tile) { opacity: 1; }
+}
+@media (pointer: coarse) {   /* touch: 44px rows and targets; the ⋯ takes the count's place */
+  .side-item { min-height: 44px; }
+  .side-more { opacity: 1; pointer-events: auto; }
+  .side-row .count { display: none; }
+  .side-row .side-item { padding-right: 38px; }
+  .side-more::after, .card-more::after { content: ''; position: absolute; inset: -8px; }
+}
+@media (prefers-reduced-motion: reduce) { .card-more { transform: none; transition: opacity .16s, background .15s; } }
 .sheet .hint.warn { color: var(--danger); }
 .side-item .side-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .key-row .link-btn.danger { color: var(--danger); }

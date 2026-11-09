@@ -243,7 +243,9 @@ class App {
 
     _focusSel(el) {
         if (!el || !el.dataset) return null;
-        if (el.closest && el.closest('#app .card')) el = el.closest('#app .card');   // a card's title button
+        if (el.closest && el.closest('#app .card')) el = el.closest('#app .card');   // a card's title or ⋯ button
+        const row = el.matches && el.matches('.side-more') && el.closest('[data-cat-row]');
+        if (row) return `[data-cat-row="${CSS.escape(row.dataset.catRow)}"] .side-more`;
         const keys = ['open', 'filter', 'appearance', 'more', 'sheet', 'toggleSide', 'export', 'collapse', 'nodeId',
             'addStep', 'addSub', 'flowAction', 'mode', 'eye', 'back', 'step'];
         const k = keys.find(key => key in el.dataset);
@@ -415,7 +417,14 @@ class App {
         sh.querySelectorAll('[data-imp]').forEach(b => b.setAttribute('aria-checked', String(b.dataset.imp === mode)));
         sh.querySelectorAll('[data-imp-pane]').forEach(p => { p.hidden = p.dataset.impPane !== mode; });
         this._showImportResult(null);
+        this._renderImportFile(null);
         if (this.els.importInput) this.els.importInput.value = '';
+    }
+
+    // The import box takes one file: the chosen one shows below it, marked Ready when it parsed.
+    _renderImportFile(file, ok) {
+        this._importFile = file;
+        this._sheet('import').querySelector('[data-imp-file]').innerHTML = file ? this._fileRowHTML(file, 'data-rm-import', ok) : '';
     }
 
     // A list of phase nodes: objects, whose children (or legacy steps) are lists of nodes too.
@@ -460,11 +469,16 @@ class App {
         sh.querySelector('[data-imp-go]').disabled = !this._importPending;
     }
 
-    _readImportFile(file) {
-        if (!file) return;
+    // Takes a FileList (picked or dropped) and reads its first .json file
+    _readImportFile(files) {
+        const all = [...(files || [])];
+        if (!all.length) return;
+        const file = all.find(f => /\.json$/i.test(f.name) || f.type === 'application/json');
+        const show = (res, f = file) => { this._showImportResult(res); this._renderImportFile(f, !res.error); };
+        if (!file) { show({ error: `“${all[0].name}” isn’t a .json file. Choose a FlowTracker backup or a phases file.` }, null); return; }
         this._fileToText(file).then(
-            text => this._showImportResult(this._parseImport(String(text), file.name.replace(/\.json$/i, '') || 'Imported Flowchart')),
-            () => this._showImportResult({ error: 'That file could not be read.' }));
+            text => show(this._parseImport(String(text), file.name.replace(/\.json$/i, '') || 'Imported Flowchart')),
+            () => show({ error: 'That file could not be read.' }));
     }
 
     _runImport() {
@@ -525,14 +539,16 @@ class App {
         });
         while (clean[clean.length - 1] === 'sep') clean.pop();
         this._menuItems = clean;
+        this._menuOwner?.removeAttribute('aria-expanded');
         this._menuOwner = owner || null;
+        if (owner && owner.hasAttribute('aria-haspopup')) owner.setAttribute('aria-expanded', 'true');   // keeps a hover-only ⋯ shown
         menu.innerHTML = (head ? `<div class="menu-h">${this._escapeHtml(head)}</div>` : '') + clean.map((it, i) => it === 'sep' ? '<hr>'
             : `<button role="${it.checked === undefined ? 'menuitem' : 'menuitemradio'}"${it.checked === undefined ? '' : ` aria-checked="${it.checked}"`} data-mi="${i}" class="${it.danger ? 'danger' : ''}">${I[it.icon] || ''}${this._escapeHtml(it.label)}${it.checked ? `<span class="mi-check">${I.check}</span>` : ''}</button>`).join('');
         menu.classList.add('open');
         const r = menu.getBoundingClientRect();
         let left = Math.min(x, innerWidth - r.width - 8), top = Math.min(y, innerHeight - r.height - 8);
-        if (anchor) { // above the button when there is room (sidebar footer), otherwise below it (toolbar)
-            const above = anchor.top - r.height - 8 >= 8;
+        if (anchor) { // below the button when it fits (toolbar, cards, sidebar rows), otherwise above it (sidebar footer)
+            const above = anchor.bottom + 8 + r.height > innerHeight - 8 && anchor.top - r.height - 8 >= 8;
             left = Math.max(8, Math.min(above ? anchor.left : anchor.right - r.width, innerWidth - r.width - 8));
             top = above ? anchor.top - r.height - 8 : Math.min(anchor.bottom + 8, innerHeight - r.height - 8);
             x = anchor.left + anchor.width / 2; y = above ? anchor.top : anchor.bottom;
@@ -547,6 +563,7 @@ class App {
 
     closeMenu() {
         this.els.menu.classList.remove('open');
+        this._menuOwner?.removeAttribute('aria-expanded');
     }
 
     _cardMenu(f) {
@@ -572,6 +589,14 @@ class App {
                 if (ok) { this.library.deleteFlowchart(f.id); this._refreshLibrary(); }
             } }
         ]];
+    }
+
+    // The one menu definition for a flowchart card or a sidebar category, used by right-click and by ⋯
+    _itemMenu(el) {
+        if (!el) return null;
+        if ('open' in el.dataset) { const fc = this.library.getFlowchart(el.dataset.open); return fc && this._cardMenu(fc); }
+        const c = this.library.getCategory(el.dataset.catRow);
+        return c && this._catMenu(c);
     }
 
     _catMenu(c) {
@@ -860,6 +885,14 @@ class App {
             const menuBtn = e.target.closest('[data-menu-btn]');
             if (menuBtn) {
                 if (this._menuOpen() && this._menuOwner === menuBtn) { this.closeMenu(); return; }
+                // ⋯ on a card or category row: the same menu as right-clicking it, placed at the button.
+                // Handled (and returned) before the card/row click, so the card or list doesn't open too.
+                if ('itemMenu' in menuBtn.dataset) {
+                    e.stopPropagation();
+                    const spec = this._itemMenu(menuBtn.closest('[data-open], [data-cat-row]'));
+                    if (spec) this.openMenu(0, 0, spec[0], spec[1], menuBtn.getBoundingClientRect(), menuBtn);
+                    return;
+                }
                 const fc = this._currentFc();
                 if ('more' in menuBtn.dataset) { if (fc) this.openMenu(0, 0, fc.name, this._moreMenuItems(), menuBtn.getBoundingClientRect(), menuBtn); }
                 else this.openMenu(0, 0, 'Appearance', this._appearanceMenuItems(), menuBtn.getBoundingClientRect(), menuBtn);
@@ -930,6 +963,11 @@ class App {
                 const left = this._sheet('ai').querySelectorAll('[data-rm-file]');
                 (left[Math.min(i, left.length - 1)] || this._sheet('ai').querySelector('[data-drop="ai"]')).focus();
             }
+            if (e.target.closest('[data-rm-import]')) {
+                this._showImportResult(null);
+                this._renderImportFile(null);
+                this._sheet('import').querySelector('[data-drop="import"]').focus();
+            }
         });
 
         scrim.addEventListener('input', (e) => {
@@ -946,17 +984,25 @@ class App {
             }
         });
 
-        this.els.importInput.addEventListener('change', (e) => this._readImportFile(e.target.files[0]));
+        const impInput = this.els.importInput;
+        impInput.addEventListener('change', () => { this._readImportFile(impInput.files); impInput.value = ''; });
         const aiFiles = scrim.querySelector('[data-ai-files]');
         aiFiles.addEventListener('change', () => { this._addAiFiles(aiFiles.files); aiFiles.value = ''; });
+        // Upload boxes: a click (or Enter/Space, it's a button) browses; dropped files go to the same handlers.
+        // Entering and leaving child elements fires drag events too, so a depth count keeps the state steady.
         scrim.querySelectorAll('[data-drop]').forEach(drop => {
-            drop.addEventListener('dragover', (e) => { e.preventDefault(); drop.classList.add('over'); });
-            drop.addEventListener('dragleave', () => drop.classList.remove('over'));
+            const head = drop.querySelector('.drop-t'), title = head.textContent;
+            let depth = 0;
+            const setOver = on => { drop.classList.toggle('over', on); head.textContent = on ? head.dataset.over : title; };
+            drop.addEventListener('dragenter', (e) => { e.preventDefault(); if (!depth++) setOver(true); });
+            drop.addEventListener('dragleave', () => { if (depth && !--depth) setOver(false); });
+            drop.addEventListener('dragover', (e) => e.preventDefault());
             drop.addEventListener('drop', (e) => {
                 e.preventDefault();
-                drop.classList.remove('over');
+                depth = 0;
+                setOver(false);
                 if (drop.dataset.drop === 'ai') this._addAiFiles(e.dataTransfer.files);
-                else this._readImportFile(e.dataTransfer.files[0]);
+                else this._readImportFile(e.dataTransfer.files);
             });
         });
         // Enter in the key field saves the key instead of submitting the whole sheet
@@ -1028,20 +1074,11 @@ class App {
         // Right-click: flowchart cards and categories (flowchart-view nodes have their own handler)
         this.els.app.addEventListener('contextmenu', (e) => {
             if (this._sheetOpen() || e.target.closest('#app .flow')) return;
-            const card = e.target.closest('[data-open]');
-            const cat = !card && e.target.closest('[data-filter]');
-            let spec = null;
-            if (card) {
-                const fc = this.library.getFlowchart(card.dataset.open);
-                if (fc) spec = this._cardMenu(fc);
-            } else if (cat && !FT_FILTERS[cat.dataset.filter]) {
-                const c = this.library.getCategory(cat.dataset.filter);
-                if (c) spec = this._catMenu(c);
-            }
+            const el = e.target.closest('[data-open], [data-cat-row]'), spec = el && this._itemMenu(el);
             if (!spec) { this.closeMenu(); return; }
             e.preventDefault();
-            const el = card || cat, [x, y] = this._menuPoint(e, el);
-            this.openMenu(x, y, spec[0], spec[1], null, el);
+            const owner = el.querySelector(':scope > .side-item') || el, [x, y] = this._menuPoint(e, owner);
+            this.openMenu(x, y, spec[0], spec[1], null, owner);
         });
 
         document.addEventListener('pointerdown', (e) => {
@@ -1118,8 +1155,8 @@ class App {
             const target = draggedId && e.target.closest('[data-cat-drop]');
             if (!target) return;
             e.preventDefault();
-            this.library.assignFlowchartToCategory(draggedId, target.dataset.filter);
-            const fc = this.library.getFlowchart(draggedId), cat = this.library.getCategory(target.dataset.filter);
+            this.library.assignFlowchartToCategory(draggedId, target.dataset.catRow);
+            const fc = this.library.getFlowchart(draggedId), cat = this.library.getCategory(target.dataset.catRow);
             draggedId = null;
             clear();
             this._refreshLibrary();
@@ -1162,8 +1199,11 @@ class App {
         const all = this.library.getFlowcharts(), cats = this.library.getCategories();
         if (!FT_FILTERS[this.state.filter] && !cats.some(c => c.id === this.state.filter)) this.state.filter = 'all';
 
-        const item = (id, label, lead, count, isCat) =>
-            `<button class="side-item ${this.state.filter === id ? 'active' : ''}" data-filter="${esc(id)}"${isCat ? ' data-cat-drop' : ''}${this.state.filter === id ? ' aria-current="true"' : ''}>${lead}<span class="side-label">${esc(label)}</span><span class="count">${count}</span></button>`;
+        // A category row wraps its button with a ⋯ button beside it (a button can't hold another button)
+        const item = (id, label, lead, count, isCat) => {
+            const btn = `<button class="side-item ${this.state.filter === id ? 'active' : ''}" data-filter="${esc(id)}"${this.state.filter === id ? ' aria-current="true"' : ''}>${lead}<span class="side-label">${esc(label)}</span><span class="count">${count}</span></button>`;
+            return isCat ? `<div class="side-row" data-cat-drop data-cat-row="${esc(id)}">${btn}<button type="button" class="side-more" data-menu-btn data-item-menu aria-haspopup="menu" aria-label="Options for ${esc(label)}" title="Options">${I.more}</button></div>` : btn;
+        };
 
         // Keep the search field (and its caret) when the sidebar re-renders while someone is typing in it
         const active = document.activeElement;
@@ -1217,6 +1257,7 @@ class App {
         const next = s.isDone ? 'All steps complete' : s.next ? `Next: <b>${esc(s.next)}</b>` : 'No steps yet';
         return `<article class="card" data-open="${esc(f.id)}" draggable="true" style="--c:${this._catColor(cat)}">
             <div class="card-top"><span class="tile" aria-hidden="true">${I.cardIcon}</span>${this._leftHTML(f, 'card', s)}</div>
+            <button type="button" class="card-more" data-menu-btn data-item-menu aria-haspopup="menu" aria-label="Options for ${esc(f.name)}" title="Options">${I.more}</button>
             <h2><button type="button" class="card-link">${esc(f.name)}</button></h2>
             <p class="meta">${esc(cat ? cat.name : 'No Category')}</p>
             <p class="next">${next}</p>
@@ -1702,9 +1743,28 @@ class App {
     }
 
     _renderAiFileList() {
-        const esc = s => this._escapeHtml(s);
-        this._sheet('ai').querySelector('[data-files]').innerHTML = (this._aiFiles || []).map((f, i) =>
-            `<span class="file-chip" title="${esc(f.name)}">${esc(f.name)}<button type="button" aria-label="Remove ${esc(f.name)}" data-rm-file="${i}">${this.I.x}</button></span>`).join('');
+        const files = this._aiFiles || [];
+        // Image previews are object URLs: release the ones whose file was removed
+        this._thumbs = this._thumbs || new Map();
+        this._thumbs.forEach((url, f) => { if (!files.includes(f)) { URL.revokeObjectURL(url); this._thumbs.delete(f); } });
+        this._sheet('ai').querySelector('[data-files]').innerHTML = files.map((f, i) => this._fileRowHTML(f, `data-rm-file="${i}"`, true)).join('');
+    }
+
+    // One chosen file: preview (image) or file icon, name, kind and size, a Ready pill, and a remove button
+    _fileRowHTML(f, rmAttr, ready) {
+        const I = this.I, esc = s => this._escapeHtml(s), isImg = f.type.startsWith('image/');
+        if (isImg && !this._thumbs?.has(f)) (this._thumbs = this._thumbs || new Map()).set(f, URL.createObjectURL(f));
+        const kind = isImg ? 'Image' : f.type === 'application/pdf' ? 'PDF' : ((f.name.match(/\.(\w+)$/) || [])[1] || 'File').toUpperCase();
+        const thumb = isImg ? `<span class="file-thumb" style="background-image:url('${this._thumbs.get(f)}')"></span>` : `<span class="file-thumb">${I.file}</span>`;
+        return `<div class="file-row">${thumb}<span class="file-meta"><span class="file-name" title="${esc(f.name)}">${esc(f.name)}</span>`
+            + `<span class="file-sub">${esc(kind)}, ${this._fmtBytes(f.size)}</span></span>${ready ? '<span class="file-ready">Ready</span>' : ''}`
+            + `<button type="button" class="file-x" aria-label="Remove ${esc(f.name)}" ${rmAttr}>${I.x}</button></div>`;
+    }
+
+    _fmtBytes(b) {
+        if (b < 1024) return `${b} B`;
+        const i = Math.min(Math.floor(Math.log(b) / Math.log(1024)), 3);
+        return `${(b / 1024 ** i).toFixed(1).replace(/\.0$/, '')} ${['B', 'KB', 'MB', 'GB'][i]}`;
     }
 
     _isTextFile(f) {

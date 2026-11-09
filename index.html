@@ -10,7 +10,7 @@
 
     <!-- Fonts: the system font first (SF Pro on Apple devices); Inter elsewhere -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="css/app.css?v=nested-47">
+    <link rel="stylesheet" href="css/app.css?v=nested-48">
 </head>
 
 <body>
@@ -93,10 +93,15 @@
                 <div class="seg" role="radiogroup" aria-label="Import method">
                     <button type="button" role="radio" aria-checked="true" data-imp="file">File</button><button type="button" role="radio" aria-checked="false" data-imp="paste">Paste</button>
                 </div>
-                <div data-imp-pane="file">
-                    <button type="button" class="drop" data-drop="import"><span data-icon="import"></span><span>Drop a .json file here, or <b>browse</b></span></button>
+                <div data-imp-pane="file"><div class="field">
+                    <button type="button" class="drop" data-drop="import" aria-describedby="imp-drop-d">
+                        <span class="drop-stack" aria-hidden="true"><span class="drop-tile l"></span><span class="drop-tile r"></span><span class="drop-tile front" data-icon="fileUp"></span></span>
+                        <span class="drop-t" data-over="Drop to import">Click or drag a .json file here</span>
+                        <span class="drop-d" id="imp-drop-d">A FlowTracker backup, or the phases of one flowchart.</span>
+                    </button>
                     <input type="file" id="file-import" accept=".json,application/json" hidden>
-                </div>
+                    <div class="file-list" data-imp-file></div>
+                </div></div>
                 <div data-imp-pane="paste" hidden><textarea class="textarea code" style="min-height:200px" spellcheck="false" aria-label="JSON to import" data-imp-text placeholder='[ { "title": "Plan", "children": [ { "title": "Define goals", "completed": false } ] } ]'></textarea></div>
                 <div class="preview-row" data-imp-result hidden style="--c:var(--green-fill)"><span class="dot"></span><span data-imp-name></span><span class="muted" data-imp-count></span></div>
                 <p class="hint" data-imp-hint hidden></p>
@@ -141,9 +146,13 @@
                 </div>
                 <label class="field"><span>Notes</span><textarea class="textarea" rows="4" data-ai-text placeholder="e.g. Launch the new website: plan, design, build and launch, with QA before go-live."></textarea></label>
                 <div class="field"><span class="field-label">Attachments</span>
-                    <button type="button" class="drop" data-drop="ai"><span data-icon="import"></span><span>Drop PDFs, images or text files, or <b>browse</b></span></button>
+                    <button type="button" class="drop" data-drop="ai" aria-describedby="ai-drop-d">
+                        <span class="drop-stack" aria-hidden="true"><span class="drop-tile l"></span><span class="drop-tile r"></span><span class="drop-tile front" data-icon="fileUp"></span></span>
+                        <span class="drop-t" data-over="Drop to attach">Click or drag your notes here</span>
+                        <span class="drop-d" id="ai-drop-d">PDFs, images or text files, up to 20 MB each. One file or many.</span>
+                    </button>
                     <input type="file" data-ai-files accept=".pdf,.md,.markdown,.txt,image/*" multiple hidden>
-                    <div class="files" data-files></div>
+                    <div class="file-list" data-files></div>
                 </div>
                 <p class="hint warn" role="alert" data-ai-error hidden></p>
             </div>
@@ -163,9 +172,9 @@
     <div class="toast" role="status" aria-live="polite" data-toast></div>
 
     <!-- Scripts (Order Matters) -->
-    <script src="js/library.js?v=nested-47"></script>
-    <script src="js/ui.js?v=nested-47"></script>
-    <script src="js/app.js?v=nested-47"></script>
+    <script src="js/library.js?v=nested-48"></script>
+    <script src="js/ui.js?v=nested-48"></script>
+    <script src="js/app.js?v=nested-48"></script>
 </body>
 
 </html>
